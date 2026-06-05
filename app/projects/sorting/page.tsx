@@ -17,6 +17,8 @@ export default function SortingVisualizerPage() {
     speed, 
     updateStateFromEngine,
     setFinished,
+    setSweeping,
+    setSorted,
     volume,
     isMuted
   } = useSortingStore();
@@ -44,6 +46,37 @@ export default function SortingVisualizerPage() {
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
+
+  const triggerVictorySweep = (arrayToSweep: number[]) => {
+    setSweeping(true);
+    setSorted([]);
+    
+    let currentIdx = 0;
+    const n = arrayToSweep.length;
+    // Total sweep duration target of 800ms, with a safety cap between 8ms and 150ms per step
+    const delay = Math.min(150, Math.max(8, 800 / n));
+    const maxVal = Math.max(...arrayToSweep, 100);
+
+    const sweepStep = () => {
+      // If sweep was cancelled (e.g. user clicked reset or randomize), stop the animation
+      if (!useSortingStore.getState().isSweeping) return;
+
+      if (currentIdx < n) {
+        setSorted(Array.from({ length: currentIdx + 1 }, (_, i) => i));
+        
+        const val = arrayToSweep[currentIdx];
+        playSortSound(val, maxVal, volumeRef.current, isMutedRef.current);
+        
+        currentIdx++;
+        setTimeout(sweepStep, delay);
+      } else {
+        setSweeping(false);
+        setFinished(true);
+      }
+    };
+
+    sweepStep();
+  };
 
   useEffect(() => {
     if (isPlaying) {
@@ -81,8 +114,9 @@ export default function SortingVisualizerPage() {
             }, speedRef.current);
           } else {
             // Algorithm finished
-            setFinished(true);
+            const finalArray = useSortingStore.getState().dataArray;
             generatorRef.current = null;
+            triggerVictorySweep(finalArray);
           }
         }
       };
