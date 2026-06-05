@@ -116,11 +116,22 @@ export default function ControlPanel() {
           {/* Audio Controls */}
           <div className="flex items-center gap-3 w-full sm:w-auto 2xl:border-l 2xl:border-slate-800 2xl:pl-6">
             <button
-              onClick={toggleMute}
+              onClick={() => {
+                if (isMuted) {
+                  toggleMute();
+                  if (volume === 0) setVolume(0.5);
+                } else {
+                  if (volume === 0) {
+                    setVolume(0.5);
+                  } else {
+                    toggleMute();
+                  }
+                }
+              }}
               className="text-slate-400 hover:text-slate-200 transition-colors p-2 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center"
-              title={isMuted ? "Unmute" : "Mute"}
+              title={isMuted || volume === 0 ? "Unmute" : "Mute"}
             >
-              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
             <input
               type="range"
@@ -129,8 +140,11 @@ export default function ControlPanel() {
               step="0.05"
               value={isMuted ? 0 : volume}
               onChange={(e) => {
-                setVolume(Number(e.target.value));
-                if (isMuted) toggleMute();
+                const newVol = Number(e.target.value);
+                setVolume(newVol);
+                if (isMuted && newVol > 0) {
+                  toggleMute();
+                }
               }}
               className="w-24 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
               title="Volume"
