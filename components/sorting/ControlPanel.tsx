@@ -7,6 +7,7 @@ import { Play, Pause, RotateCcw, Shuffle, Volume2, VolumeX } from 'lucide-react'
 export default function ControlPanel() {
   const { 
     isPlaying, 
+    isSweeping,
     play, 
     pause, 
     generateNewArray, 
@@ -47,20 +48,21 @@ export default function ControlPanel() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => isPlaying ? pause() : play()}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] w-32"
+            disabled={isSweeping}
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-semibold transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] w-32"
           >
             {isPlaying ? <><Pause size={18} /> Pause</> : <><Play size={18} /> Play</>}
           </button>
           <button 
             onClick={() => reset()}
-            disabled={isPlaying}
+            disabled={isPlaying || isSweeping}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors border border-slate-700 hover:border-slate-600"
           >
             <RotateCcw size={18} /> Reset
           </button>
           <button 
             onClick={() => generateNewArray()}
-            disabled={isPlaying}
+            disabled={isPlaying || isSweeping}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors border border-slate-700 hover:border-slate-600"
           >
             <Shuffle size={18} /> Randomize
@@ -75,7 +77,7 @@ export default function ControlPanel() {
             <select 
               value={algorithm}
               onChange={(e) => setAlgorithm(e.target.value)}
-              disabled={isPlaying}
+              disabled={isPlaying || isSweeping}
               className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-sm font-medium outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full sm:w-48 shadow-inner"
             >
               {Object.keys(algorithms).map(algo => (
@@ -108,7 +110,7 @@ export default function ControlPanel() {
               step="1"
               value={arraySize}
               onChange={(e) => setArraySize(Number(e.target.value))}
-              disabled={isPlaying}
+              disabled={isPlaying || isSweeping}
               className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
             />
           </div>

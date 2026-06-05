@@ -12,6 +12,7 @@ export interface SortingState {
   accesses: number;
   
   isPlaying: boolean;
+  isSweeping: boolean;
   speed: number;
   algorithm: string;
   isFinished: boolean;
@@ -31,6 +32,8 @@ export interface SortingState {
   reset: () => void;
   updateStateFromEngine: (stepData: any) => void;
   setFinished: (finished: boolean) => void;
+  setSweeping: (sweeping: boolean) => void;
+  setSorted: (sorted: number[]) => void;
 }
 
 const generateRandomArray = (size: number) => 
@@ -46,6 +49,7 @@ export const useSortingStore = create<SortingState>((set, get) => ({
   accesses: 0,
   
   isPlaying: false,
+  isSweeping: false,
   speed: 50, // ms delay, default speed
   algorithm: 'Bubble Sort',
   isFinished: false,
@@ -64,6 +68,7 @@ export const useSortingStore = create<SortingState>((set, get) => ({
       comparisons: 0,
       accesses: 0,
       isPlaying: false,
+      isSweeping: false,
       isFinished: false,
     });
   },
@@ -118,6 +123,8 @@ export const useSortingStore = create<SortingState>((set, get) => ({
     accesses: stepData.accesses,
   }),
 
-  setFinished: (isFinished) => set({ isFinished, isPlaying: false })
+  setFinished: (isFinished) => set({ isFinished, isPlaying: false }),
+  setSweeping: (isSweeping) => set({ isSweeping }),
+  setSorted: (sorted) => set({ sorted })
 }));
 
