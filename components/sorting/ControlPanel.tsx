@@ -68,7 +68,7 @@ export default function ControlPanel() {
         </div>
 
         {/* Settings */}
-        <div className="flex flex-col sm:flex-row items-center gap-6 xl:ml-auto w-full xl:w-auto">
+        <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center xl:justify-end gap-6 xl:ml-auto w-full xl:w-auto">
           {/* Algorithm Selector */}
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <label className="text-sm font-semibold text-slate-400 tracking-wide uppercase">Algorithm</label>
@@ -114,7 +114,7 @@ export default function ControlPanel() {
           </div>
 
           {/* Audio Controls */}
-          <div className="flex items-center gap-3 w-full sm:w-auto xl:border-l xl:border-slate-800 xl:pl-6">
+          <div className="flex items-center gap-3 w-full sm:w-auto 2xl:border-l 2xl:border-slate-800 2xl:pl-6">
             <button
               onClick={toggleMute}
               className="text-slate-400 hover:text-slate-200 transition-colors p-2 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-center"
