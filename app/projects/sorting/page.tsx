@@ -25,6 +25,8 @@ export default function SortingVisualizerPage() {
   const generatorRef = useRef<any>(null);
   const isPlayingRef = useRef(isPlaying);
   const speedRef = useRef(speed);
+  const volumeRef = useRef(volume);
+  const isMutedRef = useRef(isMuted);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -34,6 +36,14 @@ export default function SortingVisualizerPage() {
   useEffect(() => {
     speedRef.current = speed;
   }, [speed]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -58,11 +68,11 @@ export default function SortingVisualizerPage() {
             if (step.comparing) {
               const idx = step.comparing[0];
               const val = step.array[idx];
-              playSortSound(val, 105, volume, isMuted);
+              playSortSound(val, 105, volumeRef.current, isMutedRef.current);
             } else if (step.swapping) {
               const idx = step.swapping[0];
               const val = step.array[idx];
-              playSortSound(val, 105, volume, isMuted);
+              playSortSound(val, 105, volumeRef.current, isMutedRef.current);
             }
             
             // Re-schedule
