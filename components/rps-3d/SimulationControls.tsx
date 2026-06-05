@@ -136,49 +136,51 @@ export default function SimulationControls() {
         {/* Spawn Count Settings */}
         <div className="flex flex-col gap-3">
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Initial Spawns</label>
-          <div className="flex gap-2 items-center">
-            <div className="flex flex-col flex-1 gap-1">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">🪨 Rock</span>
-              <input 
-                type="number" 
-                min="1" 
-                max="200"
-                value={rocks} 
-                disabled={isPlaying}
-                onChange={(e) => setRocks(Number(e.target.value))}
-                className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none"
-              />
-            </div>
-            <div className="flex flex-col flex-1 gap-1">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">📄 Paper</span>
-              <input 
-                type="number" 
-                min="1" 
-                max="200"
-                value={papers} 
-                disabled={isPlaying}
-                onChange={(e) => setPapers(Number(e.target.value))}
-                className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none"
-              />
-            </div>
-            <div className="flex flex-col flex-1 gap-1">
-              <span className="text-[10px] text-slate-500 font-bold uppercase">✂️ Scissors</span>
-              <input 
-                type="number" 
-                min="1" 
-                max="200"
-                value={scissors} 
-                disabled={isPlaying}
-                onChange={(e) => setScissors(Number(e.target.value))}
-                className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none"
-              />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <div className="flex flex-col flex-1 gap-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">🪨 Rock</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="200"
+                  value={rocks} 
+                  disabled={isPlaying}
+                  onChange={(e) => setRocks(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none w-full"
+                />
+              </div>
+              <div className="flex flex-col flex-1 gap-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">📄 Paper</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="200"
+                  value={papers} 
+                  disabled={isPlaying}
+                  onChange={(e) => setPapers(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none w-full"
+                />
+              </div>
+              <div className="flex flex-col flex-1 gap-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">✂️ Scissors</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="200"
+                  value={scissors} 
+                  disabled={isPlaying}
+                  onChange={(e) => setScissors(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-800 focus:border-blue-500 disabled:opacity-50 transition-colors rounded px-3 py-1.5 text-sm font-mono outline-none w-full"
+                />
+              </div>
             </div>
             <button
               onClick={handleApplyCounts}
               disabled={isPlaying}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 hover:border-slate-600 rounded text-xs font-semibold uppercase tracking-wider self-end h-[34px] transition-colors"
+              className="w-full py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 hover:border-slate-600 rounded text-xs font-semibold uppercase tracking-wider transition-colors h-[34px] mt-1"
             >
-              Apply
+              Apply Counts
             </button>
           </div>
         </div>
