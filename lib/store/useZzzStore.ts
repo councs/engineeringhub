@@ -19,6 +19,44 @@ export interface ZzzEdge {
   type: 'best-synergy' | 'faction-match' | 'attribute-match' | 'general';
 }
 
+export interface ZzzCharacter {
+  id: string;
+  name: string;
+  faction: string;
+  attribute: string;
+  emoji: string;
+  color: string;
+}
+
+export const ALL_ZZZ_CHARACTERS: ZzzCharacter[] = [
+  { id: 'ellen', name: 'Ellen Joe', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🦈', color: '#38BDF8' },
+  { id: 'lycaon', name: 'Von Lycaon', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🐺', color: '#7DD3FC' },
+  { id: 'rina', name: 'Alexandrina', faction: 'Victoria Housekeeping', attribute: 'Electric', emoji: '👻', color: '#FACC15' },
+  { id: 'corin', name: 'Corin Wickes', faction: 'Victoria Housekeeping', attribute: 'Physical', emoji: '🪚', color: '#94A3B8' },
+  { id: 'zhuyuan', name: 'Zhu Yuan', faction: 'PubSec', attribute: 'Ether', emoji: '🚔', color: '#C084FC' },
+  { id: 'qingyi', name: 'Qingyi', faction: 'PubSec', attribute: 'Electric', emoji: '🎋', color: '#FACC15' },
+  { id: 'jane', name: 'Jane Doe', faction: 'PubSec (Undercover)', attribute: 'Physical', emoji: '🐭', color: '#EF4444' },
+  { id: 'seth', name: 'Seth Lowell', faction: 'PubSec', attribute: 'Electric', emoji: '🐯', color: '#60A5FA' },
+  { id: 'anby', name: 'Anby Demara', faction: 'Cunning Hares', attribute: 'Electric', emoji: '🍔', color: '#A3E635' },
+  { id: 'nicole', name: 'Nicole Demara', faction: 'Cunning Hares', attribute: 'Ether', emoji: '💼', color: '#E879F9' },
+  { id: 'billy', name: 'Billy Kid', faction: 'Cunning Hares', attribute: 'Physical', emoji: '🤖', color: '#94A3B8' },
+  { id: 'nekomata', name: 'Nekomata', faction: 'Cunning Hares', attribute: 'Physical', emoji: '🐱', color: '#F87171' },
+  { id: 'grace', name: 'Grace Howard', faction: 'Belobog Industries', attribute: 'Electric', emoji: '🔧', color: '#FB923C' },
+  { id: 'koleda', name: 'Koleda Belobog', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🔨', color: '#F87171' },
+  { id: 'ben', name: 'Ben Bigger', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🐻', color: '#EF4444' },
+  { id: 'anton', name: 'Anton Ivanov', faction: 'Belobog Industries', attribute: 'Electric', emoji: '🔋', color: '#FB923C' },
+  { id: 'soukaku', name: 'Soukaku', faction: 'Section 6', attribute: 'Ice', emoji: '👹', color: '#0EA5E9' },
+  { id: 'miyabi', name: 'Hoshimi Miyabi', faction: 'Section 6', attribute: 'Ice', emoji: '🦊', color: '#38BDF8' },
+  { id: 'harumasa', name: 'Harumasa', faction: 'Section 6', attribute: 'Electric', emoji: '🏹', color: '#FACC15' },
+  { id: 'soldier11', name: 'Soldier 11', faction: 'Obols Squad', attribute: 'Fire', emoji: '👓', color: '#EF4444' },
+  { id: 'lucy', name: 'Lucy', faction: 'Sons of Calydon', attribute: 'Fire', emoji: '🐷', color: '#FB923C' },
+  { id: 'piper', name: 'Piper Wheel', faction: 'Sons of Calydon', attribute: 'Physical', emoji: '🛞', color: '#94A3B8' },
+  { id: 'caesar', name: 'Caesar King', faction: 'Sons of Calydon', attribute: 'Physical', emoji: '🛡️', color: '#EF4444' },
+  { id: 'burnice', name: 'Burnice White', faction: 'Sons of Calydon', attribute: 'Fire', emoji: '🍹', color: '#FB923C' },
+  { id: 'yanagi', name: 'Tsukishiro Yanagi', faction: 'Section 6', attribute: 'Electric', emoji: '☯️', color: '#FACC15' },
+  { id: 'lighter', name: 'Lighter', faction: 'Sons of Calydon', attribute: 'Fire', emoji: '🥊', color: '#EF4444' },
+];
+
 interface ZzzState {
   nodes: ZzzNode[];
   edges: ZzzEdge[];
@@ -30,20 +68,22 @@ interface ZzzState {
   clearEdges: () => void;
   arrangeInCircle: (centerX: number, centerY: number, radius: number) => void;
   resetToDefault: () => void;
+  addCharacterNode: (charId: string) => void;
+  removeCharacterNode: (charId: string) => void;
 }
 
 const INITIAL_NODES: Omit<ZzzNode, 'x' | 'y'>[] = [
-  { id: 'ellen', name: 'Ellen Joe', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🦈', color: '#38BDF8' }, // Sky-400
-  { id: 'lycaon', name: 'Von Lycaon', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🐺', color: '#7DD3FC' }, // Sky-300
-  { id: 'soukaku', name: 'Soukaku', faction: 'Section 6', attribute: 'Ice', emoji: '👹', color: '#0EA5E9' }, // Sky-500
-  { id: 'zhuyuan', name: 'Zhu Yuan', faction: 'PubSec', attribute: 'Ether', emoji: '🚔', color: '#C084FC' }, // Purple-400
-  { id: 'qingyi', name: 'Qingyi', faction: 'PubSec', attribute: 'Electric', emoji: '🎋', color: '#FACC15' }, // Yellow-400
-  { id: 'anby', name: 'Anby Demara', faction: 'Cunning Hares', attribute: 'Electric', emoji: '🍔', color: '#A3E635' }, // Lime-400
-  { id: 'nicole', name: 'Nicole Demara', faction: 'Cunning Hares', attribute: 'Ether', emoji: '💼', color: '#E879F9' }, // Fuchsia-400
-  { id: 'billy', name: 'Billy Kid', faction: 'Cunning Hares', attribute: 'Physical', emoji: '🤖', color: '#94A3B8' }, // Slate-400
-  { id: 'grace', name: 'Grace Howard', faction: 'Belobog Industries', attribute: 'Electric', emoji: '🔧', color: '#FB923C' }, // Orange-400
-  { id: 'koleda', name: 'Koleda Belobog', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🔨', color: '#F87171' }, // Red-400
-  { id: 'ben', name: 'Ben Bigger', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🐻', color: '#EF4444' }, // Red-500
+  { id: 'ellen', name: 'Ellen Joe', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🦈', color: '#38BDF8' },
+  { id: 'lycaon', name: 'Von Lycaon', faction: 'Victoria Housekeeping', attribute: 'Ice', emoji: '🐺', color: '#7DD3FC' },
+  { id: 'soukaku', name: 'Soukaku', faction: 'Section 6', attribute: 'Ice', emoji: '👹', color: '#0EA5E9' },
+  { id: 'zhuyuan', name: 'Zhu Yuan', faction: 'PubSec', attribute: 'Ether', emoji: '🚔', color: '#C084FC' },
+  { id: 'qingyi', name: 'Qingyi', faction: 'PubSec', attribute: 'Electric', emoji: '🎋', color: '#FACC15' },
+  { id: 'anby', name: 'Anby Demara', faction: 'Cunning Hares', attribute: 'Electric', emoji: '🍔', color: '#A3E635' },
+  { id: 'nicole', name: 'Nicole Demara', faction: 'Cunning Hares', attribute: 'Ether', emoji: '💼', color: '#E879F9' },
+  { id: 'billy', name: 'Billy Kid', faction: 'Cunning Hares', attribute: 'Physical', emoji: '🤖', color: '#94A3B8' },
+  { id: 'grace', name: 'Grace Howard', faction: 'Belobog Industries', attribute: 'Electric', emoji: '🔧', color: '#FB923C' },
+  { id: 'koleda', name: 'Koleda Belobog', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🔨', color: '#F87171' },
+  { id: 'ben', name: 'Ben Bigger', faction: 'Belobog Industries', attribute: 'Fire', emoji: '🐻', color: '#EF4444' },
 ];
 
 const INITIAL_EDGES: ZzzEdge[] = [
@@ -125,6 +165,24 @@ export const useZzzStore = create<ZzzState>()(
           };
         }),
         edges: INITIAL_EDGES,
+      })),
+
+      addCharacterNode: (charId) => set((state) => {
+        if (state.nodes.some(n => n.id === charId)) return state;
+        const charData = ALL_ZZZ_CHARACTERS.find(c => c.id === charId);
+        if (!charData) return state;
+        
+        const newNode: ZzzNode = {
+          ...charData,
+          x: 400 + (Math.random() - 0.5) * 60,
+          y: 300 + (Math.random() - 0.5) * 60,
+        };
+        return { nodes: [...state.nodes, newNode] };
+      }),
+
+      removeCharacterNode: (charId) => set((state) => ({
+        nodes: state.nodes.filter(n => n.id !== charId),
+        edges: state.edges.filter(e => e.source !== charId && e.target !== charId),
       })),
     }),
     {
