@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useZzzStore, ZzzNode, ZzzEdge, ALL_ZZZ_CHARACTERS } from '@/lib/store/useZzzStore';
+import { useZzzStore, ZzzNode, ZzzEdge } from '@/lib/store/useZzzStore';
 import { Trash2, Plus, Zap, Heart, ShieldAlert, Award } from 'lucide-react';
 
 export default function SynergyGraph() {
@@ -14,9 +14,37 @@ export default function SynergyGraph() {
     clearEdges,
     arrangeInCircle,
     resetToDefault,
-    addCharacterNode,
+    addCustomCharacter,
     removeCharacterNode
   } = useZzzStore();
+
+  // Custom Character Creation state
+  const [customName, setCustomName] = useState('');
+  const [customEmoji, setCustomEmoji] = useState('👤');
+  const [customFaction, setCustomFaction] = useState('Cunning Hares');
+  const [customAttribute, setCustomAttribute] = useState('Ice');
+
+  const handleCreateCustomCharacter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customName.trim()) return;
+
+    let color = '#94A3B8'; // Physical (Slate)
+    if (customAttribute === 'Ice') color = '#38BDF8';
+    else if (customAttribute === 'Fire') color = '#EF4444';
+    else if (customAttribute === 'Electric') color = '#FACC15';
+    else if (customAttribute === 'Ether') color = '#C084FC';
+
+    addCustomCharacter({
+      name: customName.trim(),
+      emoji: customEmoji.trim() || '👤',
+      faction: customFaction,
+      attribute: customAttribute,
+      color,
+    });
+
+    setCustomName('');
+    setCustomEmoji('👤');
+  };
 
   const svgRef = useRef<SVGSVGElement>(null);
   
@@ -255,36 +283,98 @@ export default function SynergyGraph() {
           </div>
         )}
 
-        {/* Character Pool */}
-        <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 mt-auto overflow-hidden min-h-[220px]">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
-            <span>Character Pool</span>
-            <span className="text-[10px] text-slate-500 font-mono">{nodes.length} / {ALL_ZZZ_CHARACTERS.length} active</span>
+        {/* Add Custom Character */}
+        <form onSubmit={handleCreateCustomCharacter} className="flex flex-col gap-2.5 border-t border-slate-800 pt-4">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            Create Bubble
           </span>
-          <div className="overflow-y-auto pr-1 flex flex-col gap-1.5 flex-1 max-h-[25vh] xl:max-h-[30vh]">
-            {ALL_ZZZ_CHARACTERS.map(char => {
-              const isActive = nodes.some(n => n.id === char.id);
-              return (
+          <div className="flex gap-2">
+            <input 
+              type="text"
+              placeholder="Name..."
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              className="flex-1 bg-slate-950 border border-slate-800 focus:border-yellow-500 transition-colors rounded px-2.5 py-1.5 text-xs outline-none"
+              required
+            />
+            <input 
+              type="text"
+              placeholder="Emoji"
+              value={customEmoji}
+              onChange={(e) => setCustomEmoji(e.target.value)}
+              className="w-12 text-center bg-slate-950 border border-slate-800 focus:border-yellow-500 transition-colors rounded px-1.5 py-1.5 text-xs outline-none"
+              title="Character Emoji"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <select
+              value={customFaction}
+              onChange={(e) => setCustomFaction(e.target.value)}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[10px] font-medium outline-none focus:border-yellow-500 h-[28px]"
+            >
+              <option value="Cunning Hares">Cunning Hares</option>
+              <option value="Victoria Housekeeping">Victoria Housekeeping</option>
+              <option value="PubSec">PubSec</option>
+              <option value="Belobog Industries">Belobog Industries</option>
+              <option value="Section 6">Section 6</option>
+              <option value="Sons of Calydon">Sons of Calydon</option>
+              <option value="Custom Faction">Custom Faction</option>
+            </select>
+
+            <select
+              value={customAttribute}
+              onChange={(e) => setCustomAttribute(e.target.value)}
+              className="w-24 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[10px] font-medium outline-none focus:border-yellow-500 h-[28px]"
+            >
+              <option value="Ice">Ice (Blue)</option>
+              <option value="Fire">Fire (Red)</option>
+              <option value="Electric">Electric (Yellow)</option>
+              <option value="Ether">Ether (Purple)</option>
+              <option value="Physical">Physical (Slate)</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded text-xs font-bold uppercase tracking-wider transition-colors"
+          >
+            Create Character
+          </button>
+        </form>
+
+        {/* Active Character List */}
+        <div className="flex flex-col gap-2.5 border-t border-slate-800 pt-4 overflow-hidden flex-1 min-h-[160px]">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+            <span>Active Bubbles</span>
+            <span className="text-[10px] text-slate-500 font-mono">{nodes.length} nodes</span>
+          </span>
+          <div className="overflow-y-auto pr-1 flex flex-col gap-1.5 flex-1 max-h-[18vh] xl:max-h-[25vh]">
+            {nodes.length === 0 ? (
+              <div className="text-center py-4 text-[10px] text-slate-600 italic">No active nodes. Click Create above!</div>
+            ) : (
+              nodes.map(node => (
                 <div 
-                  key={char.id}
-                  className={`flex items-center justify-between p-1.5 rounded-lg border transition-all text-xs font-medium ${isActive ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-900/20 border-transparent opacity-60 hover:opacity-85'}`}
+                  key={node.id}
+                  className="flex items-center justify-between p-1.5 bg-slate-950/40 border border-slate-800 rounded-lg text-xs font-medium"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-base select-none">{char.emoji}</span>
+                    <span className="text-base select-none">{node.emoji}</span>
                     <div className="flex flex-col">
-                      <span className="font-semibold text-slate-200 text-[11px] leading-tight">{char.name}</span>
-                      <span className="text-[9px] text-slate-500 leading-none">{char.faction}</span>
+                      <span className="font-semibold text-slate-200 text-[11px] leading-tight">{node.name}</span>
+                      <span className="text-[8px] text-slate-500 leading-none">{node.faction}</span>
                     </div>
                   </div>
                   <button
-                    onClick={() => isActive ? removeCharacterNode(char.id) : addCharacterNode(char.id)}
-                    className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${isActive ? 'bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30' : 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30'}`}
+                    onClick={() => removeCharacterNode(node.id)}
+                    className="p-1 hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 rounded transition-colors"
+                    title="Delete character bubble"
                   >
-                    {isActive ? 'Remove' : 'Add'}
+                    <Trash2 size={12} />
                   </button>
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
         </div>
       </div>
