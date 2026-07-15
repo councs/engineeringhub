@@ -2,7 +2,17 @@
 
 import Link from 'next/link';
 import { ArrowLeft, Network } from 'lucide-react';
-import SynergyGraph from '@/components/zzz-synergy/SynergyGraph';
+import dynamic from 'next/dynamic';
+
+const SynergyGraph = dynamic(() => import('@/components/zzz-synergy/SynergyGraph'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-col xl:flex-row gap-6 w-full h-[75vh] animate-pulse">
+      <div className="w-full xl:w-72 bg-slate-900 border border-slate-800 rounded-xl h-96 xl:h-auto" />
+      <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl h-full" />
+    </div>
+  )
+});
 
 export default function ZzzSynergyPage() {
   return (
