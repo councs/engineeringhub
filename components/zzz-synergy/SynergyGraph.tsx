@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useZzzStore, ZzzNode, ZzzEdge } from '@/lib/store/useZzzStore';
+import { useZzzStore, ZzzNode, ZzzEdge, ALL_ZZZ_CHARACTERS } from '@/lib/store/useZzzStore';
 import { Trash2, Plus, Zap, Heart, ShieldAlert, Award } from 'lucide-react';
 
 export default function SynergyGraph() {
@@ -13,7 +13,9 @@ export default function SynergyGraph() {
     deleteEdge,
     clearEdges,
     arrangeInCircle,
-    resetToDefault
+    resetToDefault,
+    addCharacterNode,
+    removeCharacterNode
   } = useZzzStore();
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -252,6 +254,39 @@ export default function SynergyGraph() {
             <span className="text-xs">Click any link line to customize or edit its synergy type.</span>
           </div>
         )}
+
+        {/* Character Pool */}
+        <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 mt-auto overflow-hidden min-h-[220px]">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-between">
+            <span>Character Pool</span>
+            <span className="text-[10px] text-slate-500 font-mono">{nodes.length} / {ALL_ZZZ_CHARACTERS.length} active</span>
+          </span>
+          <div className="overflow-y-auto pr-1 flex flex-col gap-1.5 flex-1 max-h-[25vh] xl:max-h-[30vh]">
+            {ALL_ZZZ_CHARACTERS.map(char => {
+              const isActive = nodes.some(n => n.id === char.id);
+              return (
+                <div 
+                  key={char.id}
+                  className={`flex items-center justify-between p-1.5 rounded-lg border transition-all text-xs font-medium ${isActive ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-900/20 border-transparent opacity-60 hover:opacity-85'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base select-none">{char.emoji}</span>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-slate-200 text-[11px] leading-tight">{char.name}</span>
+                      <span className="text-[9px] text-slate-500 leading-none">{char.faction}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => isActive ? removeCharacterNode(char.id) : addCharacterNode(char.id)}
+                    className={`px-2 py-1 rounded text-[9px] font-bold transition-all ${isActive ? 'bg-rose-950/40 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30' : 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30'}`}
+                  >
+                    {isActive ? 'Remove' : 'Add'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Main Canvas Viewport */}
