@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface ZzzNode {
   id: string;
@@ -56,71 +57,78 @@ const INITIAL_EDGES: ZzzEdge[] = [
   { id: 'e8', source: 'koleda', target: 'ben', type: 'best-synergy' },
 ];
 
-export const useZzzStore = create<ZzzState>((set, get) => ({
-  nodes: INITIAL_NODES.map((n, i) => {
-    // Initial random positions inside a default space, circle layout will rearrange
-    const angle = (i / INITIAL_NODES.length) * 2 * Math.PI;
-    return {
-      ...n,
-      x: 400 + 250 * Math.cos(angle),
-      y: 350 + 250 * Math.sin(angle),
-    };
-  }),
-  edges: INITIAL_EDGES,
-
-  updateNodePosition: (id, x, y) => set((state) => ({
-    nodes: state.nodes.map((node) => node.id === id ? { ...node, x, y } : node),
-  })),
-
-  addEdge: (source, target, type = 'general') => set((state) => {
-    // Don't add duplicate edges or self-loops
-    if (source === target) return state;
-    const exists = state.edges.some(
-      (e) => (e.source === source && e.target === target) || (e.source === target && e.target === source)
-    );
-    if (exists) return state;
-
-    const newEdge: ZzzEdge = {
-      id: `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      source,
-      target,
-      type,
-    };
-
-    return {
-      edges: [...state.edges, newEdge],
-    };
-  }),
-
-  deleteEdge: (id) => set((state) => ({
-    edges: state.edges.filter((e) => e.id !== id),
-  })),
-
-  clearEdges: () => set({ edges: [] }),
-
-  arrangeInCircle: (centerX, centerY, radius) => set((state) => {
-    const n = state.nodes.length;
-    return {
-      nodes: state.nodes.map((node, i) => {
-        const angle = (i / n) * 2 * Math.PI - Math.PI / 2; // start from top
+export const useZzzStore = create<ZzzState>()(
+  persist(
+    (set, get) => ({
+      nodes: INITIAL_NODES.map((n, i) => {
+        // Initial random positions inside a default space, circle layout will rearrange
+        const angle = (i / INITIAL_NODES.length) * 2 * Math.PI;
         return {
-          ...node,
-          x: centerX + radius * Math.cos(angle),
-          y: centerY + radius * Math.sin(angle),
+          ...n,
+          x: 400 + 250 * Math.cos(angle),
+          y: 350 + 250 * Math.sin(angle),
         };
       }),
-    };
-  }),
+      edges: INITIAL_EDGES,
 
-  resetToDefault: () => set(() => ({
-    nodes: INITIAL_NODES.map((n, i) => {
-      const angle = (i / INITIAL_NODES.length) * 2 * Math.PI - Math.PI / 2;
-      return {
-        ...n,
-        x: 400 + 220 * Math.cos(angle),
-        y: 300 + 220 * Math.sin(angle),
-      };
+      updateNodePosition: (id, x, y) => set((state) => ({
+        nodes: state.nodes.map((node) => node.id === id ? { ...node, x, y } : node),
+      })),
+
+      addEdge: (source, target, type = 'general') => set((state) => {
+        // Don't add duplicate edges or self-loops
+        if (source === target) return state;
+        const exists = state.edges.some(
+          (e) => (e.source === source && e.target === target) || (e.source === target && e.target === source)
+        );
+        if (exists) return state;
+
+        const newEdge: ZzzEdge = {
+          id: `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          source,
+          target,
+          type,
+        };
+
+        return {
+          edges: [...state.edges, newEdge],
+        };
+      }),
+
+      deleteEdge: (id) => set((state) => ({
+        edges: state.edges.filter((e) => e.id !== id),
+      })),
+
+      clearEdges: () => set({ edges: [] }),
+
+      arrangeInCircle: (centerX, centerY, radius) => set((state) => {
+        const n = state.nodes.length;
+        return {
+          nodes: state.nodes.map((node, i) => {
+            const angle = (i / n) * 2 * Math.PI - Math.PI / 2; // start from top
+            return {
+              ...node,
+              x: centerX + radius * Math.cos(angle),
+              y: centerY + radius * Math.sin(angle),
+            };
+          }),
+        };
+      }),
+
+      resetToDefault: () => set(() => ({
+        nodes: INITIAL_NODES.map((n, i) => {
+          const angle = (i / INITIAL_NODES.length) * 2 * Math.PI - Math.PI / 2;
+          return {
+            ...n,
+            x: 400 + 220 * Math.cos(angle),
+            y: 300 + 220 * Math.sin(angle),
+          };
+        }),
+        edges: INITIAL_EDGES,
+      })),
     }),
-    edges: INITIAL_EDGES,
-  })),
-}));
+    {
+      name: 'zzz-synergy-storage',
+    }
+  )
+);
