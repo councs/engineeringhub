@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers } from 'lucide-react';
 
 export default function AnalyticsDashboard() {
   const {
@@ -49,12 +49,20 @@ export default function AnalyticsDashboard() {
     ratingIcon = '💎';
   }
 
+  const bd = evalResult?.breakdown || {
+    lifespanPoints: 0,
+    peakPopPoints: 0,
+    chaosPoints: 0,
+    loopPoints: 0,
+    traitPoints: 0,
+  };
+
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
       
       {/* Simulation Settled Banner Alert */}
       {isSettled && settledInfo && (
-        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 border border-purple-500/40 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.2)] animate-in fade-in duration-300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 border border-purple-500/40 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.2)] animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-purple-500/20 border border-purple-500/40 rounded-lg text-purple-300">
               <Flag size={20} />
@@ -74,7 +82,7 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col items-end text-right">
+          <div className="flex flex-col items-start sm:items-end text-left sm:text-right">
             <span className="text-[10px] uppercase font-bold text-slate-400">Tally Score</span>
             <span className="text-xl font-mono font-extrabold text-amber-400">
               {evalResult?.score || 0}
@@ -185,6 +193,72 @@ export default function AnalyticsDashboard() {
           </span>
         </div>
 
+      </div>
+
+      {/* Score Formula Breakdown Section */}
+      <div className="flex flex-col gap-3 border-t border-slate-800/80 pt-4">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+          <Layers size={14} className="text-sky-400" /> Seed Power Score Breakdown
+        </span>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          
+          {/* 1. Run Time / Lifespan */}
+          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
+            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Clock size={10} className="text-sky-400" /> Pre-Loop Run Time
+            </span>
+            <span className="font-mono font-bold text-sky-400 mt-1">
+              +{bd.lifespanPoints} pts
+            </span>
+            <span className="text-[9px] text-slate-500">{evalResult?.lifespan || 0} ticks (3.0×)</span>
+          </div>
+
+          {/* 2. Peak Population */}
+          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
+            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Flame size={10} className="text-rose-400" /> Peak Pop
+            </span>
+            <span className="font-mono font-bold text-rose-400 mt-1">
+              +{bd.peakPopPoints} pts
+            </span>
+            <span className="text-[9px] text-slate-500">{evalResult?.peakPopulation || 0} max cells (1.5×)</span>
+          </div>
+
+          {/* 3. Chaos SD */}
+          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
+            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Sparkles size={10} className="text-purple-400" /> Chaos Variance
+            </span>
+            <span className="font-mono font-bold text-purple-400 mt-1">
+              +{bd.chaosPoints} pts
+            </span>
+            <span className="text-[9px] text-slate-500">±{evalResult?.chaosVariance || 0} SD (4.0×)</span>
+          </div>
+
+          {/* 4. Loop Period */}
+          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
+            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Repeat size={10} className="text-amber-400" /> Loop Bonus
+            </span>
+            <span className="font-mono font-bold text-amber-400 mt-1">
+              +{bd.loopPoints} pts
+            </span>
+            <span className="text-[9px] text-slate-500">Period {evalResult?.period || 0} (20× P)</span>
+          </div>
+
+          {/* 5. Traits */}
+          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs col-span-2 sm:col-span-1">
+            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+              <Flag size={10} className="text-emerald-400" /> Trait Badges
+            </span>
+            <span className="font-mono font-bold text-emerald-400 mt-1">
+              +{bd.traitPoints} pts
+            </span>
+            <span className="text-[9px] text-slate-500">{evalResult?.traits.length || 0} badges (50×)</span>
+          </div>
+
+        </div>
       </div>
 
     </div>

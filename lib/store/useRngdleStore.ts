@@ -10,15 +10,24 @@ export interface TraitBadge {
   color: string;
 }
 
+export interface ScoreBreakdown {
+  lifespanPoints: number; // Pre-loop run time points (ticks survived before loop/steady state)
+  peakPopPoints: number;  // Peak live population count points
+  chaosPoints: number;    // Population Chaos SD points
+  loopPoints: number;     // Oscillator period bonus points
+  traitPoints: number;    // Special trait badges bonus points
+}
+
 export interface FastEvalResult {
   seed: string;
-  lifespan: number;
+  lifespan: number; // Ticks survived before settling into loop/static/extinction
   peakPopulation: number;
   chaosVariance: number;
-  period: number; // 0 if no loop detected
+  period: number; // 0 if no loop detected, 1 for static, N for period-N oscillator
   score: number;
   rating: SeedRating;
   traits: TraitBadge[];
+  breakdown: ScoreBreakdown;
 }
 
 export interface SettledInfo {
@@ -224,10 +233,23 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const variance = popHistory.reduce((sum, val) => sum + Math.pow(val - meanPop, 2), 0) / (popHistory.length || 1);
   const chaosVariance = Math.round(Math.sqrt(variance));
 
-  // Compute overall Seed Power Score
-  const score = Math.round(
-    (lifespan * 2.5) + (peakPop * 1.5) + (chaosVariance * 3.5) + (period * 12) + (traits.length * 50)
-  );
+  // Compute Breakdown & Score:
+  // 1. Lifespan / Run Time before loop (3.0 pts per tick)
+  const lifespanPoints = Math.round(lifespan * 3.0);
+  
+  // 2. Peak Population Points (1.5 pts per cell)
+  const peakPopPoints = Math.round(peakPop * 1.5);
+  
+  // 3. Chaos SD Points (4.0 pts per SD unit)
+  const chaosPoints = Math.round(chaosVariance * 4.0);
+  
+  // 4. Oscillator Loop Bonus (Period * 20 pts, or 10 pts for static)
+  const loopPoints = period > 1 ? period * 20 : period === 1 ? 10 : 0;
+  
+  // 5. Trait Badges Bonus (50 pts per trait)
+  const traitPoints = traits.length * 50;
+
+  const score = lifespanPoints + peakPopPoints + chaosPoints + loopPoints + traitPoints;
 
   let rating: SeedRating = 'Common';
   if (score >= 700) rating = 'Mythic';
@@ -243,6 +265,13 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     score,
     rating,
     traits,
+    breakdown: {
+      lifespanPoints,
+      peakPopPoints,
+      chaosPoints,
+      loopPoints,
+      traitPoints,
+    },
   };
 }
 
@@ -253,13 +282,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
   let timerId: NodeJS.Timeout | null = null;
   const liveSeenHashes = new Map<string, number>();
-
-  const resetLiveHashes = () => {
-    liveSeenHashes.clear();
-    const state = get();
-    const initialKey = state.grid.map(row => row.join('')).join('');
-    liveSeenHashes.set(initialKey, state.generation);
-  };
 
   const runTick = () => {
     const state = get();
@@ -324,7 +346,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       isSettled = true;
       settledInfo = {
         type: 'static',
-        reason: 'Steady State Equilibrium: Grid has reached a static configuration (Period-1 Still Life).',
+        reason: 'Steady State Equilibrium: Grid has settled into a static configuration (Period-1 Still Life).',
         period: 1,
         generation: nextGen,
       };
@@ -420,7 +442,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     play: () => {
       if (get().isPlaying) return;
       if (get().isSettled) {
-        // If resuming after settling, reset settled state
         set({ isSettled: false, settledInfo: null });
       }
       set({ isPlaying: true });
@@ -473,7 +494,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         `🧬 RNGdle Life #${res.seed}`,
         `Rating: ${res.rating} ${ratingEmoji} (Power Score: ${res.score})`,
         `Traits: ${traitsStr}`,
-        `Lifespan: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
+        `Run Time to Loop: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,
         `Live Run: Gen ${state.generation}${liveSettledStr}`,
         `https://councs.github.io/engineeringhub (Secret Prototype)`,
