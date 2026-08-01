@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Dices, Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap } from 'lucide-react';
+import { Dices, Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Infinity as InfinityIcon, ShieldAlert } from 'lucide-react';
 
 export default function SeedControls() {
   const {
@@ -19,6 +19,8 @@ export default function SeedControls() {
     setSpeed,
     isMuted,
     toggleMute,
+    autoPauseOnSettled,
+    toggleAutoPause,
     evalResult,
   } = useRngdleStore();
 
@@ -102,7 +104,7 @@ export default function SeedControls() {
           <button
             onClick={() => (isPlaying ? pause() : play())}
             className={`flex items-center justify-center gap-2 px-6 py-2.5 font-bold rounded-xl transition-all shadow-md w-32 ${
-              isSettled
+              isSettled && autoPauseOnSettled
                 ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                 : 'bg-sky-600 hover:bg-sky-500 text-slate-950 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
             }`}
@@ -136,8 +138,9 @@ export default function SeedControls() {
           </button>
         </div>
 
-        {/* Speed Slider & Web Audio Mute Toggle */}
-        <div className="flex items-center gap-4 w-full xl:w-auto">
+        {/* Speed Slider, Audio Toggle, & Auto-Stop Mode Toggle */}
+        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
+          
           {/* Mute Toggle Button */}
           <button
             onClick={toggleMute}
@@ -152,7 +155,21 @@ export default function SeedControls() {
             <span>{isMuted ? 'Muted' : 'Audio On'}</span>
           </button>
 
-          <div className="flex items-center gap-3 flex-1 xl:w-60">
+          {/* Auto-Stop Toggle Button */}
+          <button
+            onClick={toggleAutoPause}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+              autoPauseOnSettled
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.2)]'
+            }`}
+            title={autoPauseOnSettled ? 'Auto-Pause when steady state reached' : 'Continuous Mode: keeps animating even after steady state'}
+          >
+            {autoPauseOnSettled ? <ShieldAlert size={16} /> : <InfinityIcon size={16} />}
+            <span>{autoPauseOnSettled ? 'Auto-Stop: ON' : 'Continuous: ON'}</span>
+          </button>
+
+          <div className="flex items-center gap-3 flex-1 xl:w-52">
             <SlidersHorizontal size={18} className="text-slate-400" />
             <div className="flex flex-col flex-1 gap-1">
               <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
@@ -170,6 +187,7 @@ export default function SeedControls() {
               />
             </div>
           </div>
+
         </div>
 
       </div>

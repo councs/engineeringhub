@@ -11,29 +11,29 @@ export interface TraitBadge {
   emoji: string;
   description: string;
   color: string;
-  rarityTier: 1 | 2 | 3; // Rarity tier for score multiplication
+  rarityTier: 1 | 2 | 3;
   bonusPoints: number;
 }
 
 export interface ScoreBreakdown {
-  lifespanPoints: number; // Pre-loop run time points (ticks survived before loop/steady state)
-  peakPopPoints: number;  // Peak live population count points
-  chaosPoints: number;    // Population Chaos SD points
-  loopPoints: number;     // Oscillator period bonus points
-  traitPoints: number;    // Special trait badges bonus points
-  multiplier: number;     // Non-linear exponential trait multiplier
+  lifespanPoints: number;
+  peakPopPoints: number;
+  chaosPoints: number;
+  loopPoints: number;
+  traitPoints: number;
+  multiplier: number;
 }
 
 export interface FastEvalResult {
   seed: string;
-  lifespan: number; // Ticks survived before settling into loop/static/extinction
+  lifespan: number;
   peakPopulation: number;
   chaosVariance: number;
-  period: number; // 0 if no loop detected, 1 for static, N for period-N oscillator
+  period: number;
   score: number;
   rating: SeedRating;
   ruleMode: RuleMode;
-  fillDensity: number; // Initial grid fill percentage
+  fillDensity: number;
   traits: TraitBadge[];
   breakdown: ScoreBreakdown;
 }
@@ -47,16 +47,17 @@ export interface SettledInfo {
 
 export interface RngdleState {
   // Core state
-  seed: string; // 7-digit string e.g. "4206977"
-  gridSize: number; // 32
-  grid: number[][]; // 32x32 binary grid (1=alive, 0=dead)
-  ageGrid: number[][]; // 32x32 cell age matrix
+  seed: string;
+  gridSize: number;
+  grid: number[][];
+  ageGrid: number[][];
   generation: number;
   isPlaying: boolean;
   isSettled: boolean;
   settledInfo: SettledInfo | null;
-  speed: number; // ms per tick (10ms to 200ms)
+  speed: number;
   isMuted: boolean;
+  autoPauseOnSettled: boolean; // Controls whether simulation auto-stops or keeps running on steady state
   
   // Analytics & Evaluation
   evalResult: FastEvalResult | null;
@@ -72,6 +73,7 @@ export interface RngdleState {
   reset: () => void;
   setSpeed: (speed: number) => void;
   toggleMute: () => void;
+  toggleAutoPause: () => void;
   generateShareText: () => string;
 }
 
@@ -176,10 +178,9 @@ export function evaluateSeedTraits(seedStr: string): { traits: TraitBadge[]; rul
     });
   }
 
-  // Dynamic Fill Density based on Rarity Tier
-  let fillDensity = 0.22; // Common default 22%
-  if (maxTier === 2) fillDensity = 0.32; // Rare 32%
-  if (maxTier === 3) fillDensity = 0.42; // Mythic 42%
+  let fillDensity = 0.22;
+  if (maxTier === 2) fillDensity = 0.32;
+  if (maxTier === 3) fillDensity = 0.42;
 
   return { traits, ruleMode, fillDensity };
 }
@@ -194,18 +195,16 @@ function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: 
   const grid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
   const ageGrid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
 
-  const halfWidth = GRID_SIZE / 2; // 16
+  const halfWidth = GRID_SIZE / 2;
 
   for (let r = 0; r < GRID_SIZE; r++) {
     for (let c = 0; c < halfWidth; c++) {
       const rand = prng();
       const alive = rand < fillDensity ? 1 : 0;
       
-      // Populate left half
       grid[r][c] = alive;
       ageGrid[r][c] = alive ? 1 : 0;
 
-      // Mirror horizontally to right half
       const mirroredCol = GRID_SIZE - 1 - c;
       grid[r][mirroredCol] = alive;
       ageGrid[r][mirroredCol] = alive ? 1 : 0;
@@ -215,29 +214,23 @@ function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: 
   return { grid, ageGrid, fillDensity, ruleMode };
 }
 
-// Helper to check if cell is born or survives under active ruleMode
 function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: RuleMode): boolean {
   if (ruleMode === 'B368/S23 (Replicator Overdrive)') {
-    // Born on 3, 6, or 8; Survives on 2 or 3
     if (isAlive) return neighbors === 2 || neighbors === 3;
     return neighbors === 3 || neighbors === 6 || neighbors === 8;
   }
   if (ruleMode === 'B357/S23 (Pattern Shift)') {
-    // Born on 3, 5, or 7; Survives on 2 or 3
     if (isAlive) return neighbors === 2 || neighbors === 3;
     return neighbors === 3 || neighbors === 5 || neighbors === 7;
   }
   if (ruleMode === 'B36/S23 (HighLife)') {
-    // Born on 3 or 6 (HighLife Replicators!); Survives on 2 or 3
     if (isAlive) return neighbors === 2 || neighbors === 3;
     return neighbors === 3 || neighbors === 6;
   }
-  // Standard Conway B3/S23
   if (isAlive) return neighbors === 2 || neighbors === 3;
   return neighbors === 3;
 }
 
-// Fast-Forward Evaluator (200 ticks simulation)
 export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const { grid: initialGrid, fillDensity, ruleMode } = generateSymmetricalGrid(seedStr);
   let currentGrid = initialGrid.map(row => [...row]);
@@ -263,13 +256,11 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     popHistory.push(pop);
     if (pop > peakPop) peakPop = pop;
 
-    // Check for extinction
     if (pop === 0) {
       lifespan = gen;
       break;
     }
 
-    // Check for loop / stability repetition
     if (seenGridHashes.has(gridKey)) {
       const prevGen = seenGridHashes.get(gridKey)!;
       period = gen - prevGen;
@@ -278,7 +269,6 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     }
     seenGridHashes.set(gridKey, gen);
 
-    // Compute next Conway generation with mutated rule set
     const nextGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
@@ -299,12 +289,10 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     currentGrid = nextGrid;
   }
 
-  // Calculate Chaos Variance (Standard Deviation of Population)
   const meanPop = popHistory.reduce((a, b) => a + b, 0) / (popHistory.length || 1);
   const variance = popHistory.reduce((sum, val) => sum + Math.pow(val - meanPop, 2), 0) / (popHistory.length || 1);
   const chaosVariance = Math.round(Math.sqrt(variance));
 
-  // Compute Non-Linear Exponential Scoring Breakdown:
   const lifespanPoints = Math.round(lifespan * 3.5);
   const peakPopPoints = Math.round(peakPop * 2.0);
   const chaosPoints = Math.round(chaosVariance * 5.0);
@@ -313,7 +301,6 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const sumTraitBonus = traits.reduce((sum, t) => sum + t.bonusPoints, 0);
   const traitPoints = sumTraitBonus;
 
-  // Non-linear exponential trait multiplier (scaling 5x-10x for rare seeds)
   const maxTier = traits.reduce((max, t) => Math.max(max, t.rarityTier), 1);
   const multiplier = maxTier === 3 ? 3.5 : maxTier === 2 ? 2.0 : 1.0;
 
@@ -395,7 +382,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const nextPopHistory = [...state.popHistory, liveCount];
     const nextPeak = Math.max(state.peakPopulation, liveCount);
 
-    // Play pitch-shifted Web Audio synthesizer beep
     soundEngine.playTickBeep(liveCount, state.isMuted);
 
     const currentGridKey = grid.map(row => row.join('')).join('');
@@ -404,7 +390,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     let isSettled = false;
     let settledInfo: SettledInfo | null = null;
 
-    // 1. Extinction check
     if (liveCount === 0) {
       isSettled = true;
       settledInfo = {
@@ -412,9 +397,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         reason: 'Extinction: All cells have died out.',
         generation: nextGen,
       };
-    }
-    // 2. Static equilibrium check (Period 1)
-    else if (currentGridKey === nextGridKey) {
+    } else if (currentGridKey === nextGridKey) {
       isSettled = true;
       settledInfo = {
         type: 'static',
@@ -422,9 +405,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         period: 1,
         generation: nextGen,
       };
-    }
-    // 3. Oscillator Loop repetition check
-    else if (liveSeenHashes.has(nextGridKey)) {
+    } else if (liveSeenHashes.has(nextGridKey)) {
       const prevGen = liveSeenHashes.get(nextGridKey)!;
       const period = nextGen - prevGen;
       isSettled = true;
@@ -439,18 +420,22 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     liveSeenHashes.set(nextGridKey, nextGen);
 
     if (isSettled) {
-      if (timerId) clearTimeout(timerId);
       set({
         grid: nextGrid,
         ageGrid: nextAgeGrid,
         generation: nextGen,
         popHistory: nextPopHistory,
         peakPopulation: nextPeak,
-        isPlaying: false,
         isSettled: true,
         settledInfo,
+        // Only pause playback if autoPauseOnSettled is enabled!
+        isPlaying: state.autoPauseOnSettled ? false : state.isPlaying,
       });
-      return;
+
+      if (state.autoPauseOnSettled) {
+        if (timerId) clearTimeout(timerId);
+        return;
+      }
     }
 
     set({
@@ -459,8 +444,8 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       generation: nextGen,
       popHistory: nextPopHistory,
       peakPopulation: nextPeak,
-      isSettled: false,
-      settledInfo: null,
+      isSettled,
+      settledInfo: isSettled ? settledInfo : state.settledInfo,
     });
 
     if (state.isPlaying) {
@@ -479,6 +464,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     settledInfo: null,
     speed: 50, // 50ms tick
     isMuted: false,
+    autoPauseOnSettled: false, // Default to continuous live animation!
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
@@ -493,7 +479,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const initialKey = grid.map(row => row.join('')).join('');
       liveSeenHashes.set(initialKey, 0);
 
-      // Play fanfare on Legendary/Mythic roll
       if (evalRes.rating === 'Legendary' || evalRes.rating === 'Mythic') {
         soundEngine.playFanfare(get().isMuted);
       }
@@ -519,7 +504,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     play: () => {
       if (get().isPlaying) return;
-      if (get().isSettled) {
+      if (get().isSettled && get().autoPauseOnSettled) {
         set({ isSettled: false, settledInfo: null });
       }
       set({ isPlaying: true });
@@ -563,6 +548,10 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const nextMuted = !get().isMuted;
       soundEngine.setMuted(nextMuted);
       set({ isMuted: nextMuted });
+    },
+
+    toggleAutoPause: () => {
+      set((state) => ({ autoPauseOnSettled: !state.autoPauseOnSettled }));
     },
 
     generateShareText: () => {
