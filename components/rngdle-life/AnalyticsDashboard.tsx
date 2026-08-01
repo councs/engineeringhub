@@ -1,8 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers, Shield, Rocket, Zap, Wand2 } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers, ChevronDown, ChevronUp, Zap, Trophy, Grid } from 'lucide-react';
+
+function ScoreTicker({ targetScore, rating }: { targetScore: number; rating: string }) {
+  const [displayScore, setDisplayScore] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const duration = 600;
+    const stepTime = 20;
+    const steps = Math.ceil(duration / stepTime);
+    const increment = (targetScore - start) / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep >= steps) {
+        setDisplayScore(targetScore);
+        clearInterval(timer);
+      } else {
+        setDisplayScore(Math.round(start + increment * currentStep));
+      }
+    }, stepTime);
+
+    return () => clearInterval(timer);
+  }, [targetScore]);
+
+  let scoreColorStyle = 'text-sky-400';
+  if (rating === 'Mythic') {
+    scoreColorStyle = 'text-amber-400 drop-shadow-[0_0_15px_rgba(245,158,11,0.6)]';
+  } else if (rating === 'Legendary') {
+    scoreColorStyle = 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]';
+  } else if (rating === 'Rare') {
+    scoreColorStyle = 'text-cyan-300 drop-shadow-[0_0_12px_rgba(6,182,212,0.5)]';
+  }
+
+  return (
+    <span className={`text-3xl font-mono font-extrabold transition-all ${scoreColorStyle}`}>
+      {displayScore.toLocaleString()}
+    </span>
+  );
+}
 
 export default function AnalyticsDashboard() {
   const {
@@ -17,6 +57,7 @@ export default function AnalyticsDashboard() {
   } = useRngdleStore();
 
   const [copied, setCopied] = useState(false);
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(true);
 
   let currentLiveCount = 0;
   for (let r = 0; r < gridSize; r++) {
@@ -48,12 +89,15 @@ export default function AnalyticsDashboard() {
   }
 
   const bd = evalResult?.breakdown || {
+    baseScore: 0,
     lifespanPoints: 0,
     peakPopPoints: 0,
     chaosPoints: 0,
     loopPoints: 0,
     traitPoints: 0,
     multiplier: 1.0,
+    percentile: 'Top 45% Common Seed',
+    appliedTraits: [],
   };
 
   const archetype = evalResult?.archetype;
@@ -129,7 +173,7 @@ export default function AnalyticsDashboard() {
         </button>
       </div>
 
-      {/* Seed Power Score & Rating Card */}
+      {/* Seed Power Score, Percentile Rank & Rating Card */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-950/70 rounded-xl border border-slate-800">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl border ${ratingBadgeStyle} text-2xl`}>
@@ -141,14 +185,18 @@ export default function AnalyticsDashboard() {
               <span className={`px-2.5 py-0.5 rounded text-xs font-extrabold border ${ratingBadgeStyle}`}>
                 {rating}
               </span>
+              <span className="px-2.5 py-0.5 rounded text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                {bd.percentile}
+              </span>
             </div>
-            <span className="text-2xl font-mono font-extrabold text-slate-100 mt-0.5">
-              {evalResult?.score || 0} <span className="text-xs text-slate-500 font-sans font-normal">Power Score</span>
-            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <ScoreTicker targetScore={evalResult?.score || 0} rating={rating} />
+              <span className="text-xs text-slate-400 font-sans font-medium">Total Power Score</span>
+            </div>
           </div>
         </div>
 
-        {/* Period Loop / Extinction Evaluator Tag */}
+        {/* Period Loop Evaluator Tag */}
         <div className="flex flex-col sm:items-end text-left sm:text-right">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
             <Repeat size={14} className="text-purple-400" /> Loop Evaluator
@@ -166,7 +214,6 @@ export default function AnalyticsDashboard() {
       {/* Grid Real-time Stats Ticker */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         
-        {/* Current Generation */}
         <div className="flex flex-col p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
             <Activity size={12} className="text-sky-400" /> Generation
@@ -176,7 +223,6 @@ export default function AnalyticsDashboard() {
           </span>
         </div>
 
-        {/* Live Population */}
         <div className="flex flex-col p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
             <ShieldCheck size={12} className="text-emerald-400" /> Live Cells
@@ -186,7 +232,6 @@ export default function AnalyticsDashboard() {
           </span>
         </div>
 
-        {/* Peak Population */}
         <div className="flex flex-col p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
             <Flame size={12} className="text-rose-400" /> Peak Pop
@@ -196,7 +241,6 @@ export default function AnalyticsDashboard() {
           </span>
         </div>
 
-        {/* Chaos Volatility */}
         <div className="flex flex-col p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
             <Layers size={12} className="text-purple-400" /> Chaos SD
@@ -207,44 +251,102 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Seed Power Score Breakdown Grid */}
-      <div className="flex flex-col gap-3 border-t border-slate-800/80 pt-5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Score Breakdown & Multipliers</span>
-          <span className="text-xs font-mono text-amber-400 font-bold">
-            {bd.multiplier}x Rarity Multiplier Applied
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          
-          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-500 text-[10px] font-semibold">Lifespan</span>
-            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.lifespanPoints} pts</span>
+      {/* COLLAPSIBLE "WHY THIS SEED IS GOOD" BREAKDOWN CARD */}
+      <div className="flex flex-col border border-slate-800 rounded-xl bg-slate-950/60 overflow-hidden transition-all">
+        <button
+          onClick={() => setIsBreakdownOpen(!isBreakdownOpen)}
+          className="flex items-center justify-between p-4 bg-slate-950 hover:bg-slate-900 transition-colors w-full text-left"
+        >
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-400">
+            <Trophy size={16} />
+            <span>Why This Seed Is Good (Score Breakdown)</span>
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              {bd.percentile}
+            </span>
           </div>
 
-          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-500 text-[10px] font-semibold">Peak Pop</span>
-            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.peakPopPoints} pts</span>
+          <div className="flex items-center gap-2 text-slate-400 text-xs">
+            <span>{isBreakdownOpen ? 'Collapse' : 'Expand'}</span>
+            {isBreakdownOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </div>
+        </button>
 
-          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-500 text-[10px] font-semibold">Chaos SD</span>
-            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.chaosPoints} pts</span>
+        {isBreakdownOpen && (
+          <div className="flex flex-col gap-4 p-4 border-t border-slate-800 animate-in fade-in duration-300 text-xs">
+            
+            {/* Arena & Multiplier Summary Banner */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-purple-950/30 border border-purple-500/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Grid size={16} className="text-purple-400" />
+                <span className="font-semibold text-slate-200">
+                  Arena: <strong className="text-sky-300">{evalResult?.gridSize}x{evalResult?.gridSize}</strong> ({evalResult?.podCount} {evalResult?.podCount === 1 ? 'Pod' : 'Pods'}) | Rule: <strong className="text-amber-300">{evalResult?.ruleMode}</strong>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 rounded font-mono font-bold border border-amber-500/40">
+                <Zap size={14} /> {bd.multiplier}x Rarity Multiplier Applied
+              </div>
+            </div>
+
+            {/* Base Sim Score vs Trait Points Table */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              {/* Base Simulation Points */}
+              <div className="flex flex-col p-3 bg-slate-900/80 rounded-lg border border-slate-800 gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                  Base Simulation Score (+{bd.baseScore || 0} pts)
+                </span>
+
+                <div className="flex flex-col gap-1.5 font-mono text-[11px]">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Lifespan (Pre-loop Ticks)</span>
+                    <span className="font-bold text-sky-400">+{bd.lifespanPoints} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Peak Cell Population</span>
+                    <span className="font-bold text-emerald-400">+{bd.peakPopPoints} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Chaos Volatility SD</span>
+                    <span className="font-bold text-purple-400">+{bd.chaosPoints} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Oscillator Loop Bonus</span>
+                    <span className="font-bold text-amber-400">+{bd.loopPoints} pts</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trait Bonuses Unlocked */}
+              <div className="flex flex-col p-3 bg-slate-900/80 rounded-lg border border-slate-800 gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">
+                  Trait Bonuses Unlocked (+{bd.traitPoints || 0} pts)
+                </span>
+
+                {bd.appliedTraits && bd.appliedTraits.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {bd.appliedTraits.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between text-[11px] p-1.5 rounded bg-slate-950/60 border border-slate-800">
+                        <span className="font-semibold text-slate-200 flex items-center gap-1">
+                          <span>{t.emoji}</span> {t.name}
+                        </span>
+                        <span className="font-mono font-bold text-amber-400">+{t.bonusPoints} pts</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-500 italic text-[11px]">
+                    No special seed traits. Standard Conway rules applied.
+                  </span>
+                )}
+              </div>
+
+            </div>
+
           </div>
-
-          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-500 text-[10px] font-semibold">Loop Bonus</span>
-            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.loopPoints} pts</span>
-          </div>
-
-          <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs col-span-2 sm:col-span-1">
-            <span className="text-slate-500 text-[10px] font-semibold">Traits Bonus</span>
-            <span className="font-mono font-bold text-amber-400 mt-0.5">+{bd.traitPoints} pts</span>
-          </div>
-
-        </div>
+        )}
       </div>
+
     </div>
   );
 }

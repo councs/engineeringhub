@@ -23,15 +23,29 @@ export interface TraitBadge {
   color: string;
   rarityTier: 1 | 2 | 3;
   bonusPoints: number;
+  ruleUnlocked: string;
+}
+
+export interface AppliedTraitInfo {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  bonusPoints: number;
+  color: string;
+  ruleUnlocked: string;
 }
 
 export interface ScoreBreakdown {
+  baseScore: number;
   lifespanPoints: number;
   peakPopPoints: number;
   chaosPoints: number;
   loopPoints: number;
   traitPoints: number;
   multiplier: number;
+  percentile: string;
+  appliedTraits: AppliedTraitInfo[];
 }
 
 export interface ArchetypeInfo {
@@ -111,12 +125,12 @@ export interface RngdleState {
   inspectCellInfo: InspectCellInfo | null;
 
   // Artillery Mode State
-  ammoCount: number; // Max 3
+  ammoCount: number;
   initialTargetHp: number;
   currentTargetHp: number;
   projectileType: ProjectileType;
   spawnEdge: SpawnEdge;
-  spawnPos: number; // 0 to gridSize - 1
+  spawnPos: number;
   artilleryTicksRemaining: number;
   shotHistory: ShotRecord[];
   isGameOver: boolean;
@@ -198,10 +212,11 @@ export function evaluateSeedTraits(seedStr: string): {
       id: 'replicator_overdrive',
       name: 'Replicator Overdrive',
       emoji: '🌌',
-      description: 'Ultra-rare Quad zero/Meme-palindrome: Mutates to HighLife Overdrive (B368/S23)',
+      description: 'Ultra-rare Quad zero/Meme-palindrome',
       color: 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-pink-300 border-pink-500/60 shadow-[0_0_15px_rgba(236,72,153,0.4)]',
       rarityTier: 3,
       bonusPoints: 1500,
+      ruleUnlocked: 'Unlocked 64x64 Grid (4 Corner Pods) & Replicator Overdrive B368/S23',
     });
   }
 
@@ -215,10 +230,11 @@ export function evaluateSeedTraits(seedStr: string): {
       id: 'pattern_shift',
       name: 'Pattern Shift',
       emoji: '⚡',
-      description: 'Binary sequence (101010 / 111000): Mutates rules to Pattern Shift (B357/S23)',
+      description: 'Binary pattern sequence',
       color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50',
       rarityTier: 2,
       bonusPoints: 450,
+      ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & Pattern Shift B357/S23',
     });
   }
 
@@ -231,10 +247,11 @@ export function evaluateSeedTraits(seedStr: string): {
       id: 'highlife_meme',
       name: 'HighLife Mutator',
       emoji: '💥',
-      description: 'Contains 420, 69, 67, 777, or 000: Mutates to HighLife B36/S23 (Spawns Replicators!)',
+      description: 'Contains 420, 69, 67, 777, or 000',
       color: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
       rarityTier: 1,
       bonusPoints: 150,
+      ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & HighLife B36/S23 (Replicators)',
     });
   }
 
@@ -247,6 +264,7 @@ export function evaluateSeedTraits(seedStr: string): {
       color: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
       rarityTier: 2,
       bonusPoints: 300,
+      ruleUnlocked: 'Unlocked Symmetrical Palindrome Bonus (+300 pts)',
     });
   }
 
@@ -261,6 +279,7 @@ export function evaluateSeedTraits(seedStr: string): {
       color: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
       rarityTier: 2,
       bonusPoints: 250,
+      ruleUnlocked: 'Unlocked Extreme Digit Multiplier (+250 pts)',
     });
   }
 
@@ -553,21 +572,41 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const chaosPoints = Math.round(chaosVariance * 5.0);
   const loopPoints = period > 1 ? period * 30 : period === 1 ? 15 : 0;
   
+  const baseScore = lifespanPoints + peakPopPoints + chaosPoints + loopPoints;
   const sumTraitBonus = traits.reduce((sum, t) => sum + t.bonusPoints, 0);
   const traitPoints = sumTraitBonus;
 
   const maxTier = traits.reduce((max, t) => Math.max(max, t.rarityTier), 1);
   const multiplier = maxTier === 3 ? 3.5 : maxTier === 2 ? 2.0 : 1.0;
 
-  const rawScore = lifespanPoints + peakPopPoints + chaosPoints + loopPoints + traitPoints;
+  const rawScore = baseScore + traitPoints;
   const score = Math.round(rawScore * multiplier);
 
   let rating: SeedRating = 'Common';
-  if (score >= 2500) rating = 'Mythic';
-  else if (score >= 1200) rating = 'Legendary';
-  else if (score >= 500) rating = 'Rare';
+  let percentile = 'Top 45% Common Seed';
+
+  if (score >= 2500) {
+    rating = 'Mythic';
+    percentile = 'Top 0.5% Mythic Seed!';
+  } else if (score >= 1200) {
+    rating = 'Legendary';
+    percentile = 'Top 3.2% Legendary Seed!';
+  } else if (score >= 500) {
+    rating = 'Rare';
+    percentile = 'Top 14.5% Rare Seed!';
+  }
 
   const archetype = evaluateClassArchetype(ruleMode, peakPop, chaosVariance, period === 1);
+
+  const appliedTraits: AppliedTraitInfo[] = traits.map(t => ({
+    id: t.id,
+    name: t.name,
+    emoji: t.emoji,
+    description: t.description,
+    bonusPoints: t.bonusPoints,
+    color: t.color,
+    ruleUnlocked: t.ruleUnlocked,
+  }));
 
   return {
     seed: seedStr,
@@ -585,12 +624,15 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     archetype,
     traits,
     breakdown: {
+      baseScore,
       lifespanPoints,
       peakPopPoints,
       chaosPoints,
       loopPoints,
       traitPoints,
       multiplier,
+      percentile,
+      appliedTraits,
     },
   };
 }
@@ -607,13 +649,7 @@ function stampProjectile(
   let pattern: number[][] = [];
 
   if (type === 'glider') {
-    if (edge === 'top') {
-      pattern = [
-        [0, 1, 0],
-        [0, 0, 1],
-        [1, 1, 1],
-      ];
-    } else if (edge === 'left') {
+    if (edge === 'top' || edge === 'left') {
       pattern = [
         [0, 1, 0],
         [0, 0, 1],
@@ -633,7 +669,6 @@ function stampProjectile(
       ];
     }
   } else {
-    // LWSS
     if (edge === 'left' || edge === 'right') {
       pattern = [
         [0, 1, 1, 1, 1],
@@ -775,7 +810,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       };
     }
 
-    // ARTILLERY MODE TICK MANAGEMENT
     if (state.gameMode === 'artillery') {
       const remainingTicks = state.artilleryTicksRemaining - 1;
       const updatedTargetHp = liveCount;
@@ -837,7 +871,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       return;
     }
 
-    // CLASSIC MODE TICK MANAGEMENT
     if (isHardStaticStop) {
       if (timerId) clearTimeout(timerId);
       set({
@@ -1234,7 +1267,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const newGrid = state.grid.map(row => [...row]);
       const newAgeGrid = state.ageGrid.map(row => [...row]);
 
-      // Stamp Projectile onto grid
       stampProjectile(newGrid, newAgeGrid, state.projectileType, state.spawnEdge, state.spawnPos, 48);
 
       soundEngine.playFanfare(state.isMuted);
@@ -1250,7 +1282,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
           edge: state.spawnEdge,
           pos: state.spawnPos,
           hpBefore,
-          hpAfter: hpBefore, // Will update as ticks run
+          hpAfter: hpBefore,
         },
       ];
 
@@ -1258,7 +1290,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         grid: newGrid,
         ageGrid: newAgeGrid,
         ammoCount: state.ammoCount - 1,
-        artilleryTicksRemaining: 60, // Run 60 ticks per shot
+        artilleryTicksRemaining: 60,
         shotHistory: newHistory,
         isPlaying: true,
       });
@@ -1285,6 +1317,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
       return [
         `🧬 RNGdle Life #${res.seed}`,
+        `Rank: ${res.breakdown.percentile}`,
         `Archetype: ${res.archetype.emoji} ${res.archetype.title}`,
         `Rating: ${res.rating} ${ratingEmoji} (Power Score: ${res.score})`,
         `Grid: ${res.gridSize}x${res.gridSize} (${res.podCount} Pods) | Rule: ${res.ruleMode}`,

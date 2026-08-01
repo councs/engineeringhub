@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Dices, Play, Pause, SkipForward, SkipBack, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Search, X, ShieldAlert, Infinity as InfinityIcon, Grid } from 'lucide-react';
+import { Dices, Play, Pause, SkipForward, SkipBack, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Search, X, ShieldAlert, Infinity as InfinityIcon, Grid, Info, Award } from 'lucide-react';
 
 export default function SeedControls() {
   const {
@@ -36,6 +36,7 @@ export default function SeedControls() {
   } = useRngdleStore();
 
   const [inputVal, setInputVal] = useState(seed);
+  const [activeTraitHover, setActiveTraitHover] = useState<string | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -100,17 +101,45 @@ export default function SeedControls() {
           </div>
         </div>
 
-        {/* Trait Badge Chips */}
-        <div className="flex flex-wrap gap-2 items-center justify-start sm:justify-end w-full sm:w-auto">
+        {/* Trait Badge Chips with Interactive Hover Popovers */}
+        <div className="flex flex-wrap gap-2 items-center justify-start sm:justify-end w-full sm:w-auto relative">
           {evalResult?.traits && evalResult.traits.length > 0 ? (
             evalResult.traits.map((trait) => (
               <div
                 key={trait.id}
-                title={trait.description}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold shadow-sm ${trait.color}`}
+                onMouseEnter={() => setActiveTraitHover(trait.id)}
+                onMouseLeave={() => setActiveTraitHover(null)}
+                className="relative group cursor-pointer"
               >
-                <span>{trait.emoji}</span>
-                <span>{trait.name}</span>
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold shadow-sm transition-all hover:scale-105 ${trait.color}`}>
+                  <span>{trait.emoji}</span>
+                  <span>{trait.name}</span>
+                  <span className="ml-1 px-1.5 py-0.5 rounded bg-slate-950/60 font-mono text-[10px] text-amber-300 font-extrabold border border-amber-500/30">
+                    +{trait.bonusPoints}
+                  </span>
+                </div>
+
+                {/* Trait Interactive Popover Tooltip */}
+                {activeTraitHover === trait.id && (
+                  <div className="absolute top-full right-0 mt-2 z-50 w-64 p-3 bg-slate-950/95 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-2xl text-slate-200 animate-in fade-in duration-200 pointer-events-none">
+                    <div className="flex items-center gap-2 border-b border-slate-800 pb-2 mb-2">
+                      <span className="text-lg">{trait.emoji}</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-100">{trait.name}</span>
+                        <span className="text-[10px] font-mono text-amber-400 font-bold">+{trait.bonusPoints} Bonus Points</span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mb-2 leading-relaxed">
+                      {trait.description}
+                    </p>
+                    {trait.ruleUnlocked && (
+                      <div className="flex items-start gap-1.5 text-[10px] font-bold text-sky-400 bg-sky-950/40 p-2 rounded-lg border border-sky-500/30">
+                        <Zap size={12} className="shrink-0 mt-0.5" />
+                        <span>{trait.ruleUnlocked}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -121,12 +150,11 @@ export default function SeedControls() {
         </div>
       </div>
 
-      {/* INSPECTOR TOOLBAR (Renders when isInspecting === true) */}
+      {/* INSPECTOR TOOLBAR */}
       {isInspecting ? (
         <div className="flex flex-col gap-4 border-t border-amber-500/40 pt-5 bg-amber-950/20 p-4 rounded-xl border animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             
-            {/* Step & Scan Buttons */}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => stepInspection(-1)}
@@ -160,7 +188,6 @@ export default function SeedControls() {
               </button>
             </div>
 
-            {/* Cell Progress Info & Exit */}
             <div className="flex items-center gap-4">
               <span className="text-xs font-mono font-bold text-amber-300">
                 Cell Index: <span className="text-white">{inspectStep}</span> / {inspectTotalSteps}
@@ -176,10 +203,8 @@ export default function SeedControls() {
 
           </div>
 
-          {/* Inspection Step Progress Slider & Speed Control */}
           <div className="flex flex-col sm:flex-row items-center gap-6">
             
-            {/* Cell Progress Slider */}
             <div className="flex flex-col flex-1 gap-1 w-full">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
                 <span>PRNG Pod Scanning Progress</span>
@@ -195,7 +220,6 @@ export default function SeedControls() {
               />
             </div>
 
-            {/* Scan Speed Slider (Right = Faster!) */}
             <div className="flex items-center gap-3 w-full sm:w-56">
               <SlidersHorizontal size={16} className="text-amber-400" />
               <div className="flex flex-col flex-1 gap-1">
@@ -220,7 +244,6 @@ export default function SeedControls() {
         /* NORMAL SIMULATION ACTION CONTROLS */
         <div className="flex flex-col xl:flex-row items-center justify-between gap-6 border-t border-slate-800/80 pt-5">
           
-          {/* Play/Pause/Step/Reset Buttons */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => (isPlaying ? pause() : play())}
@@ -259,10 +282,8 @@ export default function SeedControls() {
             </button>
           </div>
 
-          {/* Speed Slider, Audio Toggle, & Auto-Stop Mode Toggle */}
           <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
             
-            {/* Mute Toggle Button */}
             <button
               onClick={toggleMute}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
@@ -276,7 +297,6 @@ export default function SeedControls() {
               <span>{isMuted ? 'Muted' : 'Audio On'}</span>
             </button>
 
-            {/* Auto-Stop Toggle Button */}
             <button
               onClick={toggleAutoPause}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
@@ -290,7 +310,6 @@ export default function SeedControls() {
               <span>{autoPauseOnSettled ? 'Auto-Stop: ON' : 'Continuous: ON'}</span>
             </button>
 
-            {/* Speed Slider (Right = Faster!) */}
             <div className="flex items-center gap-3 flex-1 xl:w-52">
               <SlidersHorizontal size={18} className="text-slate-400" />
               <div className="flex flex-col flex-1 gap-1">
