@@ -10,6 +10,7 @@ export default function SeedControls() {
     setSeed,
     rollRandomSeed,
     isPlaying,
+    isSettled,
     play,
     pause,
     step,
@@ -90,7 +91,11 @@ export default function SeedControls() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => (isPlaying ? pause() : play())}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(56,189,248,0.4)] w-32"
+            className={`flex items-center justify-center gap-2 px-6 py-2.5 font-bold rounded-xl transition-all shadow-md w-32 ${
+              isSettled
+                ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                : 'bg-sky-600 hover:bg-sky-500 text-slate-950 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+            }`}
           >
             {isPlaying ? (
               <>
@@ -98,7 +103,7 @@ export default function SeedControls() {
               </>
             ) : (
               <>
-                <Play size={18} /> Play
+                <Play size={18} /> {isSettled ? 'Resume' : 'Play'}
               </>
             )}
           </button>

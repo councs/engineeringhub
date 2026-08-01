@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag } from 'lucide-react';
 
 export default function AnalyticsDashboard() {
   const {
@@ -11,6 +11,8 @@ export default function AnalyticsDashboard() {
     gridSize,
     peakPopulation,
     evalResult,
+    isSettled,
+    settledInfo,
     generateShareText,
   } = useRngdleStore();
 
@@ -50,6 +52,37 @@ export default function AnalyticsDashboard() {
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
       
+      {/* Simulation Settled Banner Alert */}
+      {isSettled && settledInfo && (
+        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 border border-purple-500/40 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.2)] animate-in fade-in duration-300">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-purple-500/20 border border-purple-500/40 rounded-lg text-purple-300">
+              <Flag size={20} />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-widest text-purple-300">
+                  Simulation Settled!
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                  Tick {settledInfo.generation}
+                </span>
+              </div>
+              <span className="text-xs text-slate-300 mt-0.5">
+                {settledInfo.reason}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400">Tally Score</span>
+            <span className="text-xl font-mono font-extrabold text-amber-400">
+              {evalResult?.score || 0}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Top Header: Rating & Share Button */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
         <div className="flex items-center gap-3">

@@ -21,6 +21,13 @@ export interface FastEvalResult {
   traits: TraitBadge[];
 }
 
+export interface SettledInfo {
+  type: 'static' | 'loop' | 'extinction';
+  reason: string;
+  period?: number;
+  generation: number;
+}
+
 export interface RngdleState {
   // Core state
   seed: string; // 7-digit string e.g. "4206977"
@@ -29,6 +36,8 @@ export interface RngdleState {
   ageGrid: number[][]; // 32x32 cell age matrix
   generation: number;
   isPlaying: boolean;
+  isSettled: boolean;
+  settledInfo: SettledInfo | null;
   speed: number; // ms per tick (10ms to 200ms)
   
   // Analytics & Evaluation
@@ -243,6 +252,14 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
   const initialEval = runFastForwardEvaluation(initialSeed);
 
   let timerId: NodeJS.Timeout | null = null;
+  const liveSeenHashes = new Map<string, number>();
+
+  const resetLiveHashes = () => {
+    liveSeenHashes.clear();
+    const state = get();
+    const initialKey = state.grid.map(row => row.join('')).join('');
+    liveSeenHashes.set(initialKey, state.generation);
+  };
 
   const runTick = () => {
     const state = get();
@@ -287,12 +304,69 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const nextPopHistory = [...state.popHistory, liveCount];
     const nextPeak = Math.max(state.peakPopulation, liveCount);
 
+    const currentGridKey = grid.map(row => row.join('')).join('');
+    const nextGridKey = nextGrid.map(row => row.join('')).join('');
+
+    let isSettled = false;
+    let settledInfo: SettledInfo | null = null;
+
+    // 1. Extinction check
+    if (liveCount === 0) {
+      isSettled = true;
+      settledInfo = {
+        type: 'extinction',
+        reason: 'Extinction: All cells have died out.',
+        generation: nextGen,
+      };
+    }
+    // 2. Static equilibrium check (Period 1)
+    else if (currentGridKey === nextGridKey) {
+      isSettled = true;
+      settledInfo = {
+        type: 'static',
+        reason: 'Steady State Equilibrium: Grid has reached a static configuration (Period-1 Still Life).',
+        period: 1,
+        generation: nextGen,
+      };
+    }
+    // 3. Oscillator Loop repetition check
+    else if (liveSeenHashes.has(nextGridKey)) {
+      const prevGen = liveSeenHashes.get(nextGridKey)!;
+      const period = nextGen - prevGen;
+      isSettled = true;
+      settledInfo = {
+        type: 'loop',
+        reason: `Oscillator Loop Detected: Grid repeats state every ${period} ticks (Period-${period}).`,
+        period,
+        generation: nextGen,
+      };
+    }
+
+    liveSeenHashes.set(nextGridKey, nextGen);
+
+    if (isSettled) {
+      if (timerId) clearTimeout(timerId);
+      set({
+        grid: nextGrid,
+        ageGrid: nextAgeGrid,
+        generation: nextGen,
+        popHistory: nextPopHistory,
+        peakPopulation: nextPeak,
+        isPlaying: false,
+        isSettled: true,
+        settledInfo,
+      });
+      return;
+    }
+
     set({
       grid: nextGrid,
       ageGrid: nextAgeGrid,
       generation: nextGen,
       popHistory: nextPopHistory,
       peakPopulation: nextPeak,
+      isSettled: false,
+      settledInfo: null,
     });
 
     if (state.isPlaying) {
@@ -307,18 +381,22 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     ageGrid: initialGrids.ageGrid,
     generation: 0,
     isPlaying: false,
+    isSettled: false,
+    settledInfo: null,
     speed: 50, // 50ms tick
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
 
     setSeed: (newSeedStr) => {
-      // Clean to 7-digit string
       const cleanSeed = newSeedStr.replace(/\D/g, '').slice(0, 7).padStart(7, '0');
       const { grid, ageGrid } = generateSymmetricalGrid(cleanSeed);
       const evalRes = runFastForwardEvaluation(cleanSeed);
 
       if (timerId) clearTimeout(timerId);
+      liveSeenHashes.clear();
+      const initialKey = grid.map(row => row.join('')).join('');
+      liveSeenHashes.set(initialKey, 0);
 
       set({
         seed: cleanSeed,
@@ -326,6 +404,8 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         ageGrid,
         generation: 0,
         isPlaying: false,
+        isSettled: false,
+        settledInfo: null,
         evalResult: evalRes,
         peakPopulation: evalRes.peakPopulation,
         popHistory: [evalRes.peakPopulation],
@@ -339,6 +419,10 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     play: () => {
       if (get().isPlaying) return;
+      if (get().isSettled) {
+        // If resuming after settling, reset settled state
+        set({ isSettled: false, settledInfo: null });
+      }
       set({ isPlaying: true });
       timerId = setTimeout(runTick, get().speed);
     },
@@ -357,11 +441,18 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const state = get();
       if (timerId) clearTimeout(timerId);
       const { grid, ageGrid } = generateSymmetricalGrid(state.seed);
+
+      liveSeenHashes.clear();
+      const initialKey = grid.map(row => row.join('')).join('');
+      liveSeenHashes.set(initialKey, 0);
+
       set({
         grid,
         ageGrid,
         generation: 0,
         isPlaying: false,
+        isSettled: false,
+        settledInfo: null,
         popHistory: [state.evalResult?.peakPopulation || 0],
         peakPopulation: state.evalResult?.peakPopulation || 0,
       });
@@ -376,6 +467,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
       const ratingEmoji = res.rating === 'Mythic' ? '🌟' : res.rating === 'Legendary' ? '🔥' : res.rating === 'Rare' ? '💎' : '⚙️';
       const traitsStr = res.traits.map(t => `${t.name} ${t.emoji}`).join(' | ') || 'Standard Seed';
+      const liveSettledStr = state.settledInfo ? ` | Settled: ${state.settledInfo.reason}` : '';
 
       return [
         `🧬 RNGdle Life #${res.seed}`,
@@ -383,6 +475,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         `Traits: ${traitsStr}`,
         `Lifespan: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,
+        `Live Run: Gen ${state.generation}${liveSettledStr}`,
         `https://councs.github.io/engineeringhub (Secret Prototype)`,
       ].join('\n');
     },
