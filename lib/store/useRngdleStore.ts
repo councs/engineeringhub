@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { soundEngine } from '@/lib/audio/soundEffects';
 
 export type SeedRating = 'Common' | 'Rare' | 'Legendary' | 'Mythic';
+
+export type RuleMode = 'B3/S23 (Conway)' | 'B36/S23 (HighLife)' | 'B357/S23 (Pattern Shift)' | 'B368/S23 (Replicator Overdrive)';
 
 export interface TraitBadge {
   id: string;
@@ -8,6 +11,8 @@ export interface TraitBadge {
   emoji: string;
   description: string;
   color: string;
+  rarityTier: 1 | 2 | 3; // Rarity tier for score multiplication
+  bonusPoints: number;
 }
 
 export interface ScoreBreakdown {
@@ -16,6 +21,7 @@ export interface ScoreBreakdown {
   chaosPoints: number;    // Population Chaos SD points
   loopPoints: number;     // Oscillator period bonus points
   traitPoints: number;    // Special trait badges bonus points
+  multiplier: number;     // Non-linear exponential trait multiplier
 }
 
 export interface FastEvalResult {
@@ -26,6 +32,8 @@ export interface FastEvalResult {
   period: number; // 0 if no loop detected, 1 for static, N for period-N oscillator
   score: number;
   rating: SeedRating;
+  ruleMode: RuleMode;
+  fillDensity: number; // Initial grid fill percentage
   traits: TraitBadge[];
   breakdown: ScoreBreakdown;
 }
@@ -48,6 +56,7 @@ export interface RngdleState {
   isSettled: boolean;
   settledInfo: SettledInfo | null;
   speed: number; // ms per tick (10ms to 200ms)
+  isMuted: boolean;
   
   // Analytics & Evaluation
   evalResult: FastEvalResult | null;
@@ -62,6 +71,7 @@ export interface RngdleState {
   step: () => void;
   reset: () => void;
   setSpeed: (speed: number) => void;
+  toggleMute: () => void;
   generateShareText: () => string;
 }
 
@@ -77,67 +87,109 @@ function mulberry32(a: number) {
   };
 }
 
-// Check seed traits
-export function evaluateSeedTraits(seedStr: string): TraitBadge[] {
-  const badges: TraitBadge[] = [];
+// Expanded Rule Mutators & Mathematical Rarity Evaluator
+export function evaluateSeedTraits(seedStr: string): { traits: TraitBadge[]; ruleMode: RuleMode; fillDensity: number } {
+  const traits: TraitBadge[] = [];
+  let ruleMode: RuleMode = 'B3/S23 (Conway)';
+  let maxTier: 1 | 2 | 3 = 1;
+
   const num = parseInt(seedStr, 10);
 
-  // Meme seed
-  if (seedStr.includes('420') || seedStr.includes('69') || seedStr.includes('777')) {
-    badges.push({
-      id: 'meme',
-      name: 'Meme Seed',
+  // Tier 3: Quad Zeros or Meme Palindromes (~0.1% chance)
+  const isQuadZero = seedStr.includes('0000');
+  const isMemePalindrome = seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('') && (seedStr.includes('420') || seedStr.includes('69'));
+  
+  if (isQuadZero || isMemePalindrome || num === 0) {
+    maxTier = 3;
+    ruleMode = 'B368/S23 (Replicator Overdrive)';
+    traits.push({
+      id: 'replicator_overdrive',
+      name: 'Replicator Overdrive',
+      emoji: '🌌',
+      description: 'Ultra-rare Quad zero/Meme-palindrome: Mutates to HighLife Overdrive (B368/S23)',
+      color: 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-pink-300 border-pink-500/60 shadow-[0_0_15px_rgba(236,72,153,0.4)]',
+      rarityTier: 3,
+      bonusPoints: 1500,
+    });
+  }
+
+  // Tier 2: Binary & Pattern Sequences (~3% chance)
+  const isBinaryPattern = seedStr.includes('101010') || seedStr.includes('111000') || seedStr.includes('000111') || seedStr.includes('123456');
+  if (isBinaryPattern) {
+    if (maxTier < 2) {
+      maxTier = 2;
+      ruleMode = 'B357/S23 (Pattern Shift)';
+    }
+    traits.push({
+      id: 'pattern_shift',
+      name: 'Pattern Shift',
+      emoji: '⚡',
+      description: 'Binary sequence (101010 / 111000): Mutates rules to Pattern Shift (B357/S23)',
+      color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50',
+      rarityTier: 2,
+      bonusPoints: 450,
+    });
+  }
+
+  // Tier 1: Meme Numbers & Triple Zeros (~15% chance)
+  const isMemeDigit = seedStr.includes('420') || seedStr.includes('69') || seedStr.includes('67') || seedStr.includes('777') || seedStr.includes('000');
+  if (isMemeDigit) {
+    if (maxTier < 1) {
+      ruleMode = 'B36/S23 (HighLife)';
+    }
+    traits.push({
+      id: 'highlife_meme',
+      name: 'HighLife Mutator',
       emoji: '💥',
-      description: 'Contains 420, 69, or 777',
-      color: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+      description: 'Contains 420, 69, 67, 777, or 000: Mutates to HighLife B36/S23 (Spawns Replicators!)',
+      color: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
+      rarityTier: 1,
+      bonusPoints: 150,
     });
   }
 
   // Palindrome
   if (seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('')) {
-    badges.push({
+    traits.push({
       id: 'palindrome',
       name: 'Palindrome',
       emoji: '🔄',
       description: 'Reads identically forwards and backwards',
-      color: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+      color: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
+      rarityTier: 2,
+      bonusPoints: 300,
     });
   }
 
-  // Pattern (repeating sequences)
-  if (
-    (seedStr[0] === seedStr[2] && seedStr[1] === seedStr[3] && seedStr[2] === seedStr[4]) ||
-    (seedStr[0] === seedStr[1] && seedStr[2] === seedStr[3] && seedStr[4] === seedStr[5])
-  ) {
-    badges.push({
-      id: 'pattern',
-      name: 'Pattern Sync',
-      emoji: '⚡',
-      description: 'Contains repeating pattern sequences',
-      color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
-    });
-  }
-
-  // Extreme (All even, all odd, or small < 0001000)
+  // Extreme digits
   const isAllEven = /^[02468]+$/.test(seedStr);
   const isAllOdd = /^[13579]+$/.test(seedStr);
   if (isAllEven || isAllOdd || num < 1000) {
-    badges.push({
+    traits.push({
       id: 'extreme',
       name: 'Extreme Digit',
       emoji: '🌋',
       description: 'All even, all odd, or low magnitude seed',
-      color: 'bg-rose-500/20 text-rose-400 border-rose-500/40',
+      color: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
+      rarityTier: 2,
+      bonusPoints: 250,
     });
   }
 
-  return badges;
+  // Dynamic Fill Density based on Rarity Tier
+  let fillDensity = 0.22; // Common default 22%
+  if (maxTier === 2) fillDensity = 0.32; // Rare 32%
+  if (maxTier === 3) fillDensity = 0.42; // Mythic 42%
+
+  return { traits, ruleMode, fillDensity };
 }
 
 // Generate 2-way horizontal symmetrical grid from seed
-function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: number[][] } {
+function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: number[][]; fillDensity: number; ruleMode: RuleMode } {
   const seedNum = parseInt(seedStr, 10) || 1234567;
   const prng = mulberry32(seedNum);
+
+  const { traits, ruleMode, fillDensity } = evaluateSeedTraits(seedStr);
 
   const grid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
   const ageGrid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
@@ -147,7 +199,7 @@ function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: 
   for (let r = 0; r < GRID_SIZE; r++) {
     for (let c = 0; c < halfWidth; c++) {
       const rand = prng();
-      const alive = rand < 0.38 ? 1 : 0;
+      const alive = rand < fillDensity ? 1 : 0;
       
       // Populate left half
       grid[r][c] = alive;
@@ -160,15 +212,37 @@ function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: 
     }
   }
 
-  return { grid, ageGrid };
+  return { grid, ageGrid, fillDensity, ruleMode };
+}
+
+// Helper to check if cell is born or survives under active ruleMode
+function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: RuleMode): boolean {
+  if (ruleMode === 'B368/S23 (Replicator Overdrive)') {
+    // Born on 3, 6, or 8; Survives on 2 or 3
+    if (isAlive) return neighbors === 2 || neighbors === 3;
+    return neighbors === 3 || neighbors === 6 || neighbors === 8;
+  }
+  if (ruleMode === 'B357/S23 (Pattern Shift)') {
+    // Born on 3, 5, or 7; Survives on 2 or 3
+    if (isAlive) return neighbors === 2 || neighbors === 3;
+    return neighbors === 3 || neighbors === 5 || neighbors === 7;
+  }
+  if (ruleMode === 'B36/S23 (HighLife)') {
+    // Born on 3 or 6 (HighLife Replicators!); Survives on 2 or 3
+    if (isAlive) return neighbors === 2 || neighbors === 3;
+    return neighbors === 3 || neighbors === 6;
+  }
+  // Standard Conway B3/S23
+  if (isAlive) return neighbors === 2 || neighbors === 3;
+  return neighbors === 3;
 }
 
 // Fast-Forward Evaluator (200 ticks simulation)
 export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
-  const { grid: initialGrid } = generateSymmetricalGrid(seedStr);
+  const { grid: initialGrid, fillDensity, ruleMode } = generateSymmetricalGrid(seedStr);
   let currentGrid = initialGrid.map(row => [...row]);
   
-  const traits = evaluateSeedTraits(seedStr);
+  const { traits } = evaluateSeedTraits(seedStr);
   const popHistory: number[] = [];
   const seenGridHashes = new Map<string, number>();
 
@@ -204,7 +278,7 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     }
     seenGridHashes.set(gridKey, gen);
 
-    // Compute next Conway generation
+    // Compute next Conway generation with mutated rule set
     const nextGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
@@ -218,11 +292,8 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
           }
         }
 
-        if (currentGrid[r][c] === 1) {
-          nextGrid[r][c] = (n === 2 || n === 3) ? 1 : 0;
-        } else {
-          nextGrid[r][c] = (n === 3) ? 1 : 0;
-        }
+        const willBeAlive = evaluateCellNextState(currentGrid[r][c] === 1, n, ruleMode);
+        nextGrid[r][c] = willBeAlive ? 1 : 0;
       }
     }
     currentGrid = nextGrid;
@@ -233,28 +304,26 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const variance = popHistory.reduce((sum, val) => sum + Math.pow(val - meanPop, 2), 0) / (popHistory.length || 1);
   const chaosVariance = Math.round(Math.sqrt(variance));
 
-  // Compute Breakdown & Score:
-  // 1. Lifespan / Run Time before loop (3.0 pts per tick)
-  const lifespanPoints = Math.round(lifespan * 3.0);
+  // Compute Non-Linear Exponential Scoring Breakdown:
+  const lifespanPoints = Math.round(lifespan * 3.5);
+  const peakPopPoints = Math.round(peakPop * 2.0);
+  const chaosPoints = Math.round(chaosVariance * 5.0);
+  const loopPoints = period > 1 ? period * 30 : period === 1 ? 15 : 0;
   
-  // 2. Peak Population Points (1.5 pts per cell)
-  const peakPopPoints = Math.round(peakPop * 1.5);
-  
-  // 3. Chaos SD Points (4.0 pts per SD unit)
-  const chaosPoints = Math.round(chaosVariance * 4.0);
-  
-  // 4. Oscillator Loop Bonus (Period * 20 pts, or 10 pts for static)
-  const loopPoints = period > 1 ? period * 20 : period === 1 ? 10 : 0;
-  
-  // 5. Trait Badges Bonus (50 pts per trait)
-  const traitPoints = traits.length * 50;
+  const sumTraitBonus = traits.reduce((sum, t) => sum + t.bonusPoints, 0);
+  const traitPoints = sumTraitBonus;
 
-  const score = lifespanPoints + peakPopPoints + chaosPoints + loopPoints + traitPoints;
+  // Non-linear exponential trait multiplier (scaling 5x-10x for rare seeds)
+  const maxTier = traits.reduce((max, t) => Math.max(max, t.rarityTier), 1);
+  const multiplier = maxTier === 3 ? 3.5 : maxTier === 2 ? 2.0 : 1.0;
+
+  const rawScore = lifespanPoints + peakPopPoints + chaosPoints + loopPoints + traitPoints;
+  const score = Math.round(rawScore * multiplier);
 
   let rating: SeedRating = 'Common';
-  if (score >= 700) rating = 'Mythic';
-  else if (score >= 450) rating = 'Legendary';
-  else if (score >= 250) rating = 'Rare';
+  if (score >= 2500) rating = 'Mythic';
+  else if (score >= 1200) rating = 'Legendary';
+  else if (score >= 500) rating = 'Rare';
 
   return {
     seed: seedStr,
@@ -264,6 +333,8 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     period,
     score,
     rating,
+    ruleMode,
+    fillDensity,
     traits,
     breakdown: {
       lifespanPoints,
@@ -271,6 +342,7 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
       chaosPoints,
       loopPoints,
       traitPoints,
+      multiplier,
     },
   };
 }
@@ -289,6 +361,8 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     const grid = state.grid;
     const ageGrid = state.ageGrid;
+    const ruleMode = state.evalResult?.ruleMode || 'B3/S23 (Conway)';
+
     const nextGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
     const nextAgeGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
 
@@ -306,18 +380,13 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
           }
         }
 
-        if (grid[r][c] === 1) {
-          if (n === 2 || n === 3) {
-            nextGrid[r][c] = 1;
-            nextAgeGrid[r][c] = ageGrid[r][c] + 1;
-            liveCount++;
-          }
-        } else {
-          if (n === 3) {
-            nextGrid[r][c] = 1;
-            nextAgeGrid[r][c] = 1;
-            liveCount++;
-          }
+        const isAlive = grid[r][c] === 1;
+        const willBeAlive = evaluateCellNextState(isAlive, n, ruleMode);
+
+        if (willBeAlive) {
+          nextGrid[r][c] = 1;
+          nextAgeGrid[r][c] = isAlive ? ageGrid[r][c] + 1 : 1;
+          liveCount++;
         }
       }
     }
@@ -325,6 +394,9 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const nextGen = state.generation + 1;
     const nextPopHistory = [...state.popHistory, liveCount];
     const nextPeak = Math.max(state.peakPopulation, liveCount);
+
+    // Play pitch-shifted Web Audio synthesizer beep
+    soundEngine.playTickBeep(liveCount, state.isMuted);
 
     const currentGridKey = grid.map(row => row.join('')).join('');
     const nextGridKey = nextGrid.map(row => row.join('')).join('');
@@ -406,6 +478,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     isSettled: false,
     settledInfo: null,
     speed: 50, // 50ms tick
+    isMuted: false,
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
@@ -419,6 +492,11 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       liveSeenHashes.clear();
       const initialKey = grid.map(row => row.join('')).join('');
       liveSeenHashes.set(initialKey, 0);
+
+      // Play fanfare on Legendary/Mythic roll
+      if (evalRes.rating === 'Legendary' || evalRes.rating === 'Mythic') {
+        soundEngine.playFanfare(get().isMuted);
+      }
 
       set({
         seed: cleanSeed,
@@ -481,6 +559,12 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     setSpeed: (speed) => set({ speed }),
 
+    toggleMute: () => {
+      const nextMuted = !get().isMuted;
+      soundEngine.setMuted(nextMuted);
+      set({ isMuted: nextMuted });
+    },
+
     generateShareText: () => {
       const state = get();
       const res = state.evalResult;
@@ -493,6 +577,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       return [
         `🧬 RNGdle Life #${res.seed}`,
         `Rating: ${res.rating} ${ratingEmoji} (Power Score: ${res.score})`,
+        `Rule Mode: ${res.ruleMode} | Density: ${(res.fillDensity * 100).toFixed(0)}%`,
         `Traits: ${traitsStr}`,
         `Run Time to Loop: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,
