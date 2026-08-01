@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { soundEngine } from '@/lib/audio/soundEffects';
 
+export type GameMode = 'classic' | 'artillery';
+
 export type SeedRating = 'Common' | 'Rare' | 'Legendary' | 'Mythic';
 
 export type RuleMode = 'B3/S23 (Conway)' | 'B36/S23 (HighLife)' | 'B357/S23 (Pattern Shift)' | 'B368/S23 (Replicator Overdrive)';
@@ -8,6 +10,10 @@ export type RuleMode = 'B3/S23 (Conway)' | 'B36/S23 (HighLife)' | 'B357/S23 (Pat
 export type ClassArchetype = 'Archmage Cloning Engine' | 'Supernova' | 'Starship Fleet' | 'The Fortress';
 
 export type ThemePalette = 'Terminal Green' | 'Cyberpunk Neon' | 'Golden Solar';
+
+export type ProjectileType = 'glider' | 'lwss';
+
+export type SpawnEdge = 'top' | 'left' | 'right' | 'bottom';
 
 export interface TraitBadge {
   id: string;
@@ -44,8 +50,8 @@ export interface FastEvalResult {
   rating: SeedRating;
   ruleMode: RuleMode;
   fillDensity: number;
-  gridSize: number; // 24, 32, 48, or 64
-  podCount: number; // 1, 2, or 4 pods
+  gridSize: number;
+  podCount: number;
   theme: ThemePalette;
   archetype: ArchetypeInfo;
   traits: TraitBadge[];
@@ -65,16 +71,28 @@ export interface InspectCellInfo {
   mirroredCol: number;
   index: number;
   totalCells: number;
-  podIndex: number; // 1, 2, 3, 4
+  podIndex: number;
   prngVal: number;
   threshold: number;
   isAlive: boolean;
 }
 
+export interface ShotRecord {
+  shotNum: number;
+  type: ProjectileType;
+  edge: SpawnEdge;
+  pos: number;
+  hpBefore: number;
+  hpAfter: number;
+}
+
 export interface RngdleState {
+  // Game Mode
+  gameMode: GameMode;
+
   // Core state
   seed: string;
-  gridSize: number; // 24, 32, 48, or 64
+  gridSize: number;
   grid: number[][];
   ageGrid: number[][];
   generation: number;
@@ -92,12 +110,26 @@ export interface RngdleState {
   inspectAutoPlay: boolean;
   inspectCellInfo: InspectCellInfo | null;
 
+  // Artillery Mode State
+  ammoCount: number; // Max 3
+  initialTargetHp: number;
+  currentTargetHp: number;
+  projectileType: ProjectileType;
+  spawnEdge: SpawnEdge;
+  spawnPos: number; // 0 to gridSize - 1
+  artilleryTicksRemaining: number;
+  shotHistory: ShotRecord[];
+  isGameOver: boolean;
+  artilleryFinalScore: number;
+  percentDestroyed: number;
+
   // Analytics & Evaluation
   evalResult: FastEvalResult | null;
   peakPopulation: number;
   popHistory: number[];
 
   // Actions
+  setGameMode: (mode: GameMode) => void;
   setSeed: (newSeed: string) => void;
   rollRandomSeed: () => void;
   play: () => void;
@@ -115,10 +147,18 @@ export interface RngdleState {
   stepInspection: (dir: 1 | -1) => void;
   toggleInspectAutoPlay: () => void;
   
+  // Artillery Actions
+  setProjectileType: (type: ProjectileType) => void;
+  setSpawnEdge: (edge: SpawnEdge) => void;
+  setSpawnPos: (pos: number) => void;
+  fireArtillery: () => void;
+  resetArtilleryRound: () => void;
+
   generateShareText: () => string;
+  generateArtilleryShareText: () => string;
 }
 
-// Mulberry32 deterministic PRNG
+// Mulberry32 PRNG
 function mulberry32(a: number) {
   return function() {
     let t = a += 0x6D2B79F5;
@@ -133,7 +173,7 @@ function speedToDelayMs(speedVal: number): number {
   return Math.max(10, Math.round(210 - clamped * 2));
 }
 
-// Evaluate Seed Traits, Rule Modes, Grid Dimensions & Spawner Pod Layouts
+// Evaluate Seed Traits
 export function evaluateSeedTraits(seedStr: string): { 
   traits: TraitBadge[]; 
   ruleMode: RuleMode; 
@@ -148,7 +188,6 @@ export function evaluateSeedTraits(seedStr: string): {
 
   const num = parseInt(seedStr, 10);
 
-  // Tier 3: Quad Zeros or Meme Palindromes (~0.1% chance)
   const isQuadZero = seedStr.includes('0000');
   const isMemePalindrome = seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('') && (seedStr.includes('420') || seedStr.includes('69'));
   
@@ -166,7 +205,6 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Tier 2: Binary & Pattern Sequences (~3% chance)
   const isBinaryPattern = seedStr.includes('101010') || seedStr.includes('111000') || seedStr.includes('000111') || seedStr.includes('123456');
   if (isBinaryPattern) {
     if (maxTier < 2) {
@@ -184,7 +222,6 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Tier 1: Meme Numbers & Triple Zeros (~15% chance)
   const isMemeDigit = seedStr.includes('420') || seedStr.includes('69') || seedStr.includes('67') || seedStr.includes('777') || seedStr.includes('000');
   if (isMemeDigit) {
     if (maxTier < 1) {
@@ -201,7 +238,6 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Palindrome
   if (seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('')) {
     traits.push({
       id: 'palindrome',
@@ -214,7 +250,6 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Extreme digits
   const isAllEven = /^[02468]+$/.test(seedStr);
   const isAllOdd = /^[13579]+$/.test(seedStr);
   if (isAllEven || isAllOdd || num < 1000) {
@@ -229,29 +264,28 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Dynamic Grid Dimensions, Multi-Pod Spawners, & Visual Themes
   let gridSize = 32;
   let podCount = 1;
   let fillDensity = 0.22;
   let theme: ThemePalette = 'Terminal Green';
 
   if (maxTier === 3) {
-    gridSize = 64; // Mythic Overdrive: 64x64 Grid
-    podCount = 4;  // 4 Corner Battle Pods
+    gridSize = 64;
+    podCount = 4;
     fillDensity = 0.42;
     theme = 'Golden Solar';
   } else if (isMemeDigit || isBinaryPattern) {
-    gridSize = 48; // Meme / Pattern: 48x48 Grid
-    podCount = 2;  // 2 Opposing Corner Pods
+    gridSize = 48;
+    podCount = 2;
     fillDensity = 0.32;
     theme = 'Cyberpunk Neon';
   } else if (traits.length > 0) {
-    gridSize = 32; // Tier 1: 32x32 Grid
+    gridSize = 32;
     podCount = 1;
     fillDensity = 0.26;
     theme = 'Terminal Green';
   } else {
-    gridSize = 24; // Common Seeds: 24x24 Grid
+    gridSize = 24;
     podCount = 1;
     fillDensity = 0.20;
     theme = 'Terminal Green';
@@ -260,8 +294,8 @@ export function evaluateSeedTraits(seedStr: string): {
   return { traits, ruleMode, fillDensity, gridSize, podCount, theme };
 }
 
-// Generate Multi-Pod Symmetrical Layout
-function generateSymmetricalGrid(seedStr: string): { 
+// Generate Symmetrical Grid
+function generateSymmetricalGrid(seedStr: string, forceGridSize?: number): { 
   grid: number[][]; 
   ageGrid: number[][]; 
   fillDensity: number; 
@@ -273,33 +307,30 @@ function generateSymmetricalGrid(seedStr: string): {
   const seedNum = parseInt(seedStr, 10) || 1234567;
   const prng = mulberry32(seedNum);
 
-  const { traits, ruleMode, fillDensity, gridSize, podCount, theme } = evaluateSeedTraits(seedStr);
+  const evalRes = evaluateSeedTraits(seedStr);
+  const gridSize = forceGridSize || evalRes.gridSize;
+  const { traits, ruleMode, fillDensity, podCount, theme } = evalRes;
 
   const grid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
   const ageGrid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
 
-  // Determine pod bounding boxes
   const podLocations: { r0: number; c0: number; pSize: number }[] = [];
   const pSize = 16;
 
-  if (podCount === 1) {
-    // 1 Central Pod
+  if (podCount === 1 || forceGridSize) {
     const r0 = Math.floor((gridSize - pSize) / 2);
     const c0 = Math.floor((gridSize - pSize) / 2);
     podLocations.push({ r0, c0, pSize });
   } else if (podCount === 2) {
-    // 2 Opposing Corner Pods (Top-Left and Bottom-Right)
     podLocations.push({ r0: 4, c0: 4, pSize });
     podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
   } else if (podCount === 4) {
-    // 4 Corner Pods (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
     podLocations.push({ r0: 4, c0: 4, pSize });
     podLocations.push({ r0: 4, c0: gridSize - pSize - 4, pSize });
     podLocations.push({ r0: gridSize - pSize - 4, c0: 4, pSize });
     podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
   }
 
-  // Populate Pods with 2-way horizontal symmetry per pod
   podLocations.forEach((pod) => {
     const halfP = pod.pSize / 2;
     for (let r = 0; r < pod.pSize; r++) {
@@ -324,7 +355,7 @@ function generateSymmetricalGrid(seedStr: string): {
   return { grid, ageGrid, fillDensity, ruleMode, gridSize, podCount, theme };
 }
 
-// Compute inspection grid & cell info up to stepIndex
+// Compute inspection grid
 function computeInspectionState(seedStr: string, stepIndex: number): { 
   grid: number[][]; 
   ageGrid: number[][]; 
@@ -353,7 +384,7 @@ function computeInspectionState(seedStr: string, stepIndex: number): {
     podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
   }
 
-  const cellsPerPod = pSize * (pSize / 2); // 16 * 8 = 128 cells per pod
+  const cellsPerPod = pSize * (pSize / 2);
   const totalSteps = podLocations.length * cellsPerPod;
 
   const clampedStep = Math.max(0, Math.min(totalSteps, stepIndex));
@@ -420,7 +451,7 @@ function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: Ru
   return neighbors === 3;
 }
 
-// Evaluate Class Archetype Badge Title
+// Evaluate Class Archetype
 export function evaluateClassArchetype(
   ruleMode: RuleMode, 
   peakPop: number, 
@@ -564,6 +595,94 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   };
 }
 
+// Projectile Pattern Stamp Helper
+function stampProjectile(
+  grid: number[][], 
+  ageGrid: number[][], 
+  type: ProjectileType, 
+  edge: SpawnEdge, 
+  pos: number,
+  gridSize: number
+) {
+  let pattern: number[][] = [];
+
+  if (type === 'glider') {
+    if (edge === 'top') {
+      pattern = [
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 1],
+      ];
+    } else if (edge === 'left') {
+      pattern = [
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 1],
+      ];
+    } else if (edge === 'right') {
+      pattern = [
+        [0, 1, 0],
+        [1, 0, 0],
+        [1, 1, 1],
+      ];
+    } else {
+      pattern = [
+        [1, 1, 1],
+        [0, 0, 1],
+        [0, 1, 0],
+      ];
+    }
+  } else {
+    // LWSS
+    if (edge === 'left' || edge === 'right') {
+      pattern = [
+        [0, 1, 1, 1, 1],
+        [1, 0, 0, 0, 1],
+        [0, 0, 0, 0, 1],
+        [1, 0, 0, 1, 0],
+      ];
+    } else {
+      pattern = [
+        [1, 0, 1, 0],
+        [0, 0, 0, 1],
+        [0, 0, 0, 1],
+        [1, 0, 0, 1],
+        [0, 1, 1, 1],
+      ];
+    }
+  }
+
+  let startR = 1;
+  let startC = Math.max(0, Math.min(gridSize - pattern[0].length, pos));
+
+  if (edge === 'top') {
+    startR = 1;
+    startC = Math.max(0, Math.min(gridSize - pattern[0].length, pos));
+  } else if (edge === 'bottom') {
+    startR = gridSize - pattern.length - 1;
+    startC = Math.max(0, Math.min(gridSize - pattern[0].length, pos));
+  } else if (edge === 'left') {
+    startR = Math.max(0, Math.min(gridSize - pattern.length, pos));
+    startC = 1;
+  } else if (edge === 'right') {
+    startR = Math.max(0, Math.min(gridSize - pattern.length, pos));
+    startC = gridSize - pattern[0].length - 1;
+  }
+
+  for (let r = 0; r < pattern.length; r++) {
+    for (let c = 0; c < pattern[0].length; c++) {
+      if (pattern[r][c] === 1) {
+        const realR = startR + r;
+        const realC = startC + c;
+        if (realR >= 0 && realR < gridSize && realC >= 0 && realC < gridSize) {
+          grid[realR][realC] = 1;
+          ageGrid[realR][realC] = 1;
+        }
+      }
+    }
+  }
+}
+
 export const useRngdleStore = create<RngdleState>((set, get) => {
   const initialSeed = '4206977';
   const initialGrids = generateSymmetricalGrid(initialSeed);
@@ -572,6 +691,16 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
   let timerId: NodeJS.Timeout | null = null;
   let inspectTimerId: NodeJS.Timeout | null = null;
   const liveSeenHashes = new Map<string, number>();
+
+  const calculateTargetHp = (g: number[][], size: number): number => {
+    let count = 0;
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (g[r][c] === 1) count++;
+      }
+    }
+    return count;
+  };
 
   const runTick = () => {
     const state = get();
@@ -646,6 +775,69 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       };
     }
 
+    // ARTILLERY MODE TICK MANAGEMENT
+    if (state.gameMode === 'artillery') {
+      const remainingTicks = state.artilleryTicksRemaining - 1;
+      const updatedTargetHp = liveCount;
+
+      const hpDestroyedPct = Math.max(0, Math.min(100, Math.round(((state.initialTargetHp - updatedTargetHp) / (state.initialTargetHp || 1)) * 100)));
+      const isWon = hpDestroyedPct >= 90 || updatedTargetHp <= 5;
+      const isOutOfAmmo = state.ammoCount === 0 && (remainingTicks <= 0 || isSettled);
+
+      if (isWon || isOutOfAmmo) {
+        if (timerId) clearTimeout(timerId);
+        const finalPct = Math.max(0, Math.min(100, Math.round(((state.initialTargetHp - updatedTargetHp) / (state.initialTargetHp || 1)) * 100)));
+        const unusedAmmoBonus = state.ammoCount * 500;
+        const rarityBonus = state.evalResult?.score || 0;
+        const finalArtilleryScore = Math.round((finalPct * 100) + unusedAmmoBonus + rarityBonus);
+
+        set({
+          grid: nextGrid,
+          ageGrid: nextAgeGrid,
+          generation: state.generation + 1,
+          currentTargetHp: updatedTargetHp,
+          percentDestroyed: finalPct,
+          artilleryFinalScore: finalArtilleryScore,
+          isPlaying: false,
+          isGameOver: true,
+        });
+        return;
+      }
+
+      if (remainingTicks <= 0 || isSettled) {
+        if (timerId) clearTimeout(timerId);
+        set({
+          grid: nextGrid,
+          ageGrid: nextAgeGrid,
+          generation: state.generation + 1,
+          currentTargetHp: updatedTargetHp,
+          percentDestroyed: hpDestroyedPct,
+          isPlaying: false,
+          artilleryTicksRemaining: 0,
+        });
+        return;
+      }
+
+      soundEngine.playTickBeep(liveCount, state.isMuted);
+      liveSeenHashes.set(nextGridKey, state.generation + 1);
+
+      set({
+        grid: nextGrid,
+        ageGrid: nextAgeGrid,
+        generation: state.generation + 1,
+        currentTargetHp: updatedTargetHp,
+        percentDestroyed: hpDestroyedPct,
+        artilleryTicksRemaining: remainingTicks,
+      });
+
+      if (state.isPlaying) {
+        const delay = speedToDelayMs(state.speed);
+        timerId = setTimeout(runTick, delay);
+      }
+      return;
+    }
+
+    // CLASSIC MODE TICK MANAGEMENT
     if (isHardStaticStop) {
       if (timerId) clearTimeout(timerId);
       set({
@@ -719,7 +911,32 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     }
   };
 
+  const initArtilleryStateForSeed = (seedStr: string) => {
+    const { grid, ageGrid } = generateSymmetricalGrid(seedStr, 48);
+    const targetHp = calculateTargetHp(grid, 48);
+    return {
+      gridSize: 48,
+      grid,
+      ageGrid,
+      initialTargetHp: targetHp,
+      currentTargetHp: targetHp,
+      ammoCount: 3,
+      projectileType: 'glider' as ProjectileType,
+      spawnEdge: 'top' as SpawnEdge,
+      spawnPos: 22,
+      artilleryTicksRemaining: 0,
+      shotHistory: [],
+      isGameOver: false,
+      artilleryFinalScore: 0,
+      percentDestroyed: 0,
+      generation: 0,
+      isPlaying: false,
+    };
+  };
+
   return {
+    gameMode: 'classic',
+
     seed: initialSeed,
     gridSize: initialGrids.gridSize,
     grid: initialGrids.grid,
@@ -728,7 +945,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     isPlaying: false,
     isSettled: false,
     settledInfo: null,
-    speed: 80, // Default 80 = Fast
+    speed: 80,
     isMuted: false,
     autoPauseOnSettled: false,
     
@@ -739,42 +956,91 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     inspectAutoPlay: false,
     inspectCellInfo: null,
 
+    // Artillery State
+    ammoCount: 3,
+    initialTargetHp: 0,
+    currentTargetHp: 0,
+    projectileType: 'glider',
+    spawnEdge: 'top',
+    spawnPos: 22,
+    artilleryTicksRemaining: 0,
+    shotHistory: [],
+    isGameOver: false,
+    artilleryFinalScore: 0,
+    percentDestroyed: 0,
+
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
 
+    setGameMode: (mode) => {
+      if (timerId) clearTimeout(timerId);
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+      const state = get();
+
+      if (mode === 'artillery') {
+        const artState = initArtilleryStateForSeed(state.seed);
+        set({
+          gameMode: 'artillery',
+          isInspecting: false,
+          ...artState,
+        });
+      } else {
+        const { grid, ageGrid, gridSize } = generateSymmetricalGrid(state.seed);
+        set({
+          gameMode: 'classic',
+          gridSize,
+          grid,
+          ageGrid,
+          generation: 0,
+          isPlaying: false,
+          isGameOver: false,
+        });
+      }
+    },
+
     setSeed: (newSeedStr) => {
       const cleanSeed = newSeedStr.replace(/\D/g, '').slice(0, 7).padStart(7, '0');
-      const { grid, ageGrid, gridSize } = generateSymmetricalGrid(cleanSeed);
       const evalRes = runFastForwardEvaluation(cleanSeed);
 
       if (timerId) clearTimeout(timerId);
       if (inspectTimerId) clearTimeout(inspectTimerId);
       liveSeenHashes.clear();
-      const initialKey = grid.map(row => row.join('')).join('');
-      liveSeenHashes.set(initialKey, 0);
 
-      if (evalRes.rating === 'Legendary' || evalRes.rating === 'Mythic') {
-        soundEngine.playFanfare(get().isMuted);
+      if (get().gameMode === 'artillery') {
+        const artState = initArtilleryStateForSeed(cleanSeed);
+        set({
+          seed: cleanSeed,
+          evalResult: evalRes,
+          ...artState,
+        });
+      } else {
+        const { grid, ageGrid, gridSize } = generateSymmetricalGrid(cleanSeed);
+        const initialKey = grid.map(row => row.join('')).join('');
+        liveSeenHashes.set(initialKey, 0);
+
+        if (evalRes.rating === 'Legendary' || evalRes.rating === 'Mythic') {
+          soundEngine.playFanfare(get().isMuted);
+        }
+
+        set({
+          seed: cleanSeed,
+          gridSize,
+          grid,
+          ageGrid,
+          generation: 0,
+          isPlaying: false,
+          isInspecting: false,
+          inspectStep: 0,
+          inspectAutoPlay: false,
+          inspectCellInfo: null,
+          isSettled: false,
+          settledInfo: null,
+          evalResult: evalRes,
+          peakPopulation: evalRes.peakPopulation,
+          popHistory: [evalRes.peakPopulation],
+        });
       }
-
-      set({
-        seed: cleanSeed,
-        gridSize,
-        grid,
-        ageGrid,
-        generation: 0,
-        isPlaying: false,
-        isInspecting: false,
-        inspectStep: 0,
-        inspectAutoPlay: false,
-        inspectCellInfo: null,
-        isSettled: false,
-        settledInfo: null,
-        evalResult: evalRes,
-        peakPopulation: evalRes.peakPopulation,
-        popHistory: [evalRes.peakPopulation],
-      });
     },
 
     rollRandomSeed: () => {
@@ -840,27 +1106,31 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const state = get();
       if (timerId) clearTimeout(timerId);
       if (inspectTimerId) clearTimeout(inspectTimerId);
-      const { grid, ageGrid, gridSize } = generateSymmetricalGrid(state.seed);
 
-      liveSeenHashes.clear();
-      const initialKey = grid.map(row => row.join('')).join('');
-      liveSeenHashes.set(initialKey, 0);
+      if (state.gameMode === 'artillery') {
+        get().resetArtilleryRound();
+      } else {
+        const { grid, ageGrid, gridSize } = generateSymmetricalGrid(state.seed);
+        liveSeenHashes.clear();
+        const initialKey = grid.map(row => row.join('')).join('');
+        liveSeenHashes.set(initialKey, 0);
 
-      set({
-        gridSize,
-        grid,
-        ageGrid,
-        generation: 0,
-        isPlaying: false,
-        isInspecting: false,
-        inspectStep: 0,
-        inspectAutoPlay: false,
-        inspectCellInfo: null,
-        isSettled: false,
-        settledInfo: null,
-        popHistory: [state.evalResult?.peakPopulation || 0],
-        peakPopulation: state.evalResult?.peakPopulation || 0,
-      });
+        set({
+          gridSize,
+          grid,
+          ageGrid,
+          generation: 0,
+          isPlaying: false,
+          isInspecting: false,
+          inspectStep: 0,
+          inspectAutoPlay: false,
+          inspectCellInfo: null,
+          isSettled: false,
+          settledInfo: null,
+          popHistory: [state.evalResult?.peakPopulation || 0],
+          peakPopulation: state.evalResult?.peakPopulation || 0,
+        });
+      }
     },
 
     setSpeed: (speed) => set({ speed }),
@@ -952,6 +1222,58 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       }
     },
 
+    // Artillery Mode Actions
+    setProjectileType: (type) => set({ projectileType: type }),
+    setSpawnEdge: (edge) => set({ spawnEdge: edge }),
+    setSpawnPos: (pos) => set({ spawnPos: Math.max(0, Math.min(47, pos)) }),
+
+    fireArtillery: () => {
+      const state = get();
+      if (state.ammoCount <= 0 || state.isGameOver || state.isPlaying) return;
+
+      const newGrid = state.grid.map(row => [...row]);
+      const newAgeGrid = state.ageGrid.map(row => [...row]);
+
+      // Stamp Projectile onto grid
+      stampProjectile(newGrid, newAgeGrid, state.projectileType, state.spawnEdge, state.spawnPos, 48);
+
+      soundEngine.playFanfare(state.isMuted);
+
+      const shotNum = 4 - state.ammoCount;
+      const hpBefore = state.currentTargetHp;
+
+      const newHistory: ShotRecord[] = [
+        ...state.shotHistory,
+        {
+          shotNum,
+          type: state.projectileType,
+          edge: state.spawnEdge,
+          pos: state.spawnPos,
+          hpBefore,
+          hpAfter: hpBefore, // Will update as ticks run
+        },
+      ];
+
+      set({
+        grid: newGrid,
+        ageGrid: newAgeGrid,
+        ammoCount: state.ammoCount - 1,
+        artilleryTicksRemaining: 60, // Run 60 ticks per shot
+        shotHistory: newHistory,
+        isPlaying: true,
+      });
+
+      const delay = speedToDelayMs(state.speed);
+      timerId = setTimeout(runTick, delay);
+    },
+
+    resetArtilleryRound: () => {
+      if (timerId) clearTimeout(timerId);
+      const state = get();
+      const artState = initArtilleryStateForSeed(state.seed);
+      set(artState);
+    },
+
     generateShareText: () => {
       const state = get();
       const res = state.evalResult;
@@ -970,6 +1292,24 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         `Run Time to Loop: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,
         `Live Run: Gen ${state.generation}${liveSettledStr}`,
+        `https://councs.github.io/engineeringhub (Secret Prototype)`,
+      ].join('\n');
+    },
+
+    generateArtilleryShareText: () => {
+      const state = get();
+      const pct = state.percentDestroyed;
+      const score = state.artilleryFinalScore;
+      const ammoLeft = state.ammoCount;
+
+      const resultEmoji = pct >= 90 ? '🏆 VICTORY!' : '💥 TARGET COLLAPSED!';
+
+      return [
+        `🚀 Glider Artillery Destruction #${state.seed}`,
+        `${resultEmoji} - ${pct}% Target Destroyed`,
+        `Destruction Score: ${score} Pts 🎯`,
+        `Unused Ammo: ${ammoLeft} / 3 Gliders Left 🚀`,
+        `Seed Rarity: ${state.evalResult?.rating || 'Common'}`,
         `https://councs.github.io/engineeringhub (Secret Prototype)`,
       ].join('\n');
     },

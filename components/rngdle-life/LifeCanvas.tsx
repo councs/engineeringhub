@@ -2,11 +2,12 @@
 
 import { useEffect, useRef } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Search, Eye, Sparkles } from 'lucide-react';
+import { Search, Eye, Sparkles, Target, Crosshair } from 'lucide-react';
 
 export default function LifeCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const {
+    gameMode,
     grid,
     ageGrid,
     gridSize,
@@ -14,6 +15,11 @@ export default function LifeCanvas() {
     isInspecting,
     inspectCellInfo,
     evalResult,
+
+    // Artillery State
+    spawnEdge,
+    spawnPos,
+    projectileType,
   } = useRngdleStore();
 
   const trailRef = useRef<number[][]>([]);
@@ -38,12 +44,10 @@ export default function LifeCanvas() {
     const height = canvas.height;
     const cellSize = width / gridSize;
 
-    // Resize trail grid matrix if gridSize changed
     if (trailRef.current.length !== gridSize) {
       trailRef.current = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
     }
 
-    // Decay ghost trail values over 5 frames (decay 0.20 per frame)
     const trails = trailRef.current;
     for (let r = 0; r < gridSize; r++) {
       for (let c = 0; c < gridSize; c++) {
@@ -57,19 +61,22 @@ export default function LifeCanvas() {
       }
     }
 
-    // Theme Palettes
     let bgColor = '#020617';
     let gridColor = '#1E293B';
     let dividerColor = 'rgba(34, 197, 94, 0.3)';
 
-    if (theme === 'Cyberpunk Neon') {
+    if (gameMode === 'artillery') {
+      bgColor = '#0F040A'; // Deep Dark Artillery Radar Theme
+      gridColor = '#3F0713';
+      dividerColor = 'rgba(244, 63, 94, 0.5)';
+    } else if (theme === 'Cyberpunk Neon') {
       bgColor = '#16021F';
       gridColor = '#4C0519';
-      dividerColor = 'rgba(6, 182, 212, 0.5)'; // Cyan divider
+      dividerColor = 'rgba(6, 182, 212, 0.5)';
     } else if (theme === 'Golden Solar') {
       bgColor = '#0F051D';
       gridColor = '#3B0764';
-      dividerColor = 'rgba(245, 158, 11, 0.5)'; // Cyber Gold divider
+      dividerColor = 'rgba(245, 158, 11, 0.5)';
     }
 
     if (isInspecting) {
@@ -99,7 +106,7 @@ export default function LifeCanvas() {
       ctx.stroke();
     }
 
-    // Draw Central Axis Divider
+    // Central Axis Divider
     const midX = (gridSize / 2) * cellSize;
     ctx.strokeStyle = dividerColor;
     ctx.lineWidth = 1.5;
@@ -108,7 +115,7 @@ export default function LifeCanvas() {
     ctx.lineTo(midX, height);
     ctx.stroke();
 
-    // 1. Render Fading Ghost Trails (Dead Cell Particles)
+    // 1. Ghost Trails
     if (!isInspecting) {
       for (let r = 0; r < gridSize; r++) {
         for (let c = 0; c < gridSize; c++) {
@@ -117,12 +124,14 @@ export default function LifeCanvas() {
             const x = c * cellSize;
             const y = r * cellSize;
             
-            if (theme === 'Cyberpunk Neon') {
-              ctx.fillStyle = `rgba(236, 72, 153, ${trailAlpha * 0.45})`; // Neon Pink trail
+            if (gameMode === 'artillery') {
+              ctx.fillStyle = `rgba(244, 63, 94, ${trailAlpha * 0.45})`;
+            } else if (theme === 'Cyberpunk Neon') {
+              ctx.fillStyle = `rgba(236, 72, 153, ${trailAlpha * 0.45})`;
             } else if (theme === 'Golden Solar') {
-              ctx.fillStyle = `rgba(245, 158, 11, ${trailAlpha * 0.45})`; // Cyber Gold trail
+              ctx.fillStyle = `rgba(245, 158, 11, ${trailAlpha * 0.45})`;
             } else {
-              ctx.fillStyle = `rgba(34, 197, 94, ${trailAlpha * 0.35})`; // Terminal Green trail
+              ctx.fillStyle = `rgba(34, 197, 94, ${trailAlpha * 0.35})`;
             }
             
             const pad = cellSize > 12 ? 1.5 : 0.8;
@@ -132,7 +141,7 @@ export default function LifeCanvas() {
       }
     }
 
-    // 2. Render Active Living Cells
+    // 2. Active Living Cells
     for (let r = 0; r < gridSize; r++) {
       for (let c = 0; c < gridSize; c++) {
         if (grid[r][c] === 1) {
@@ -140,46 +149,24 @@ export default function LifeCanvas() {
           const x = c * cellSize;
           const y = r * cellSize;
 
-          let fillColor = '#22C55E'; // Terminal Green default
+          let fillColor = '#22C55E';
           let glowColor = 'rgba(34, 197, 94, 0.4)';
 
-          if (isInspecting) {
+          if (gameMode === 'artillery') {
+            fillColor = '#F43F5E'; // Rose Rocket Red
+            glowColor = 'rgba(244, 63, 94, 0.6)';
+          } else if (isInspecting) {
             fillColor = '#38BDF8';
             glowColor = 'rgba(56, 189, 248, 0.6)';
           } else if (theme === 'Golden Solar') {
-            if (age === 1) {
-              fillColor = '#FACC15'; // Solar Yellow
-              glowColor = 'rgba(250, 204, 21, 0.6)';
-            } else if (age >= 2 && age <= 5) {
-              fillColor = '#F59E0B'; // Cyber Gold
-              glowColor = 'rgba(245, 158, 11, 0.6)';
-            } else {
-              fillColor = '#FB923C'; // Amber Flame
-              glowColor = 'rgba(251, 146, 60, 0.6)';
-            }
+            fillColor = age === 1 ? '#FACC15' : age <= 5 ? '#F59E0B' : '#FB923C';
+            glowColor = 'rgba(245, 158, 11, 0.6)';
           } else if (theme === 'Cyberpunk Neon') {
-            if (age === 1) {
-              fillColor = '#06B6D4'; // Cyan
-              glowColor = 'rgba(6, 182, 212, 0.6)';
-            } else if (age >= 2 && age <= 5) {
-              fillColor = '#EC4899'; // Neon Pink
-              glowColor = 'rgba(236, 72, 153, 0.6)';
-            } else {
-              fillColor = '#A855F7'; // Neon Purple
-              glowColor = 'rgba(168, 85, 247, 0.6)';
-            }
+            fillColor = age === 1 ? '#06B6D4' : age <= 5 ? '#EC4899' : '#A855F7';
+            glowColor = 'rgba(236, 72, 153, 0.6)';
           } else {
-            // Terminal Green Theme
-            if (age === 1) {
-              fillColor = '#4ADE80'; // Emerald Light
-              glowColor = 'rgba(74, 222, 128, 0.4)';
-            } else if (age >= 2 && age <= 5) {
-              fillColor = '#22C55E'; // Green
-              glowColor = 'rgba(34, 197, 94, 0.4)';
-            } else {
-              fillColor = '#16A34A'; // Dark Green
-              glowColor = 'rgba(22, 163, 74, 0.4)';
-            }
+            fillColor = age === 1 ? '#4ADE80' : age <= 5 ? '#22C55E' : '#16A34A';
+            glowColor = 'rgba(34, 197, 94, 0.4)';
           }
 
           ctx.shadowColor = glowColor;
@@ -200,11 +187,71 @@ export default function LifeCanvas() {
       }
     }
 
-    // 3. Render Seed Inspector Target Focus Highlights & Mirrored Symmetry Pulse
+    // 3. ARTILLERY LAUNCHER TRAJECTORY PREVIEW & CROSSHAIRS
+    if (gameMode === 'artillery' && !isPlaying) {
+      let spawnR = 1;
+      let spawnC = Math.max(0, Math.min(gridSize - 1, spawnPos));
+
+      if (spawnEdge === 'top') {
+        spawnR = 1;
+        spawnC = spawnPos;
+      } else if (spawnEdge === 'bottom') {
+        spawnR = gridSize - 2;
+        spawnC = spawnPos;
+      } else if (spawnEdge === 'left') {
+        spawnR = spawnPos;
+        spawnC = 1;
+      } else if (spawnEdge === 'right') {
+        spawnR = spawnPos;
+        spawnC = gridSize - 2;
+      }
+
+      const launchX = spawnC * cellSize + cellSize / 2;
+      const launchY = spawnR * cellSize + cellSize / 2;
+
+      // Trajectory dashed line
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+
+      let targetX = width / 2;
+      let targetY = height / 2;
+
+      if (spawnEdge === 'top') {
+        targetX = projectileType === 'glider' ? launchX + 120 : launchX;
+        targetY = height - 20;
+      } else if (spawnEdge === 'bottom') {
+        targetX = projectileType === 'glider' ? launchX + 120 : launchX;
+        targetY = 20;
+      } else if (spawnEdge === 'left') {
+        targetX = width - 20;
+        targetY = projectileType === 'glider' ? launchY + 120 : launchY;
+      } else if (spawnEdge === 'right') {
+        targetX = 20;
+        targetY = projectileType === 'glider' ? launchY + 120 : launchY;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(launchX, launchY);
+      ctx.lineTo(targetX, targetY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Crosshair Circle on Spawn Point
+      ctx.strokeStyle = '#F43F5E';
+      ctx.lineWidth = 2.0;
+      ctx.shadowColor = '#F43F5E';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(launchX, launchY, cellSize * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 4. Seed Inspector Focus Box
     if (isInspecting && inspectCellInfo) {
       const { row, col, mirroredCol, isAlive } = inspectCellInfo;
 
-      // Target left cell box
       const leftX = col * cellSize;
       const leftY = row * cellSize;
 
@@ -217,7 +264,6 @@ export default function LifeCanvas() {
       ctx.fillStyle = isAlive ? 'rgba(250, 204, 21, 0.5)' : 'rgba(239, 68, 68, 0.25)';
       ctx.fillRect(leftX + 1, leftY + 1, cellSize - 2, cellSize - 2);
 
-      // Mirrored right cell box
       const rightX = mirroredCol * cellSize;
       const rightY = row * cellSize;
 
@@ -232,7 +278,7 @@ export default function LifeCanvas() {
 
       ctx.shadowBlur = 0;
     }
-  }, [grid, ageGrid, gridSize, theme, isInspecting, inspectCellInfo]);
+  }, [grid, ageGrid, gridSize, theme, gameMode, spawnEdge, spawnPos, projectileType, isPlaying, isInspecting, inspectCellInfo]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPlaying || isInspecting) return;
@@ -246,6 +292,24 @@ export default function LifeCanvas() {
     const cellSize = rect.width / gridSize;
     const col = Math.floor(x / cellSize);
     const row = Math.floor(y / cellSize);
+
+    if (gameMode === 'artillery') {
+      // In artillery mode, clicking border sets launch position
+      if (row <= 2) {
+        useRngdleStore.getState().setSpawnEdge('top');
+        useRngdleStore.getState().setSpawnPos(col);
+      } else if (row >= gridSize - 3) {
+        useRngdleStore.getState().setSpawnEdge('bottom');
+        useRngdleStore.getState().setSpawnPos(col);
+      } else if (col <= 2) {
+        useRngdleStore.getState().setSpawnEdge('left');
+        useRngdleStore.getState().setSpawnPos(row);
+      } else if (col >= gridSize - 3) {
+        useRngdleStore.getState().setSpawnEdge('right');
+        useRngdleStore.getState().setSpawnPos(row);
+      }
+      return;
+    }
 
     if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
       const state = useRngdleStore.getState();
@@ -268,7 +332,9 @@ export default function LifeCanvas() {
 
   return (
     <div className={`relative flex flex-col items-center justify-center w-full max-w-xl aspect-square rounded-2xl border p-3 shadow-2xl overflow-hidden group transition-all duration-500 ${
-      isInspecting
+      gameMode === 'artillery'
+        ? 'bg-rose-950/80 border-rose-500/60 shadow-[0_0_35px_rgba(244,63,94,0.3)]'
+        : isInspecting
         ? 'bg-slate-950 border-amber-500/60 shadow-[0_0_35px_rgba(250,204,21,0.25)]'
         : theme === 'Golden Solar'
         ? 'bg-purple-950/70 border-amber-500/60 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
@@ -280,7 +346,7 @@ export default function LifeCanvas() {
       {/* Background glow */}
       <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 rounded-full blur-3xl pointer-events-none opacity-50 group-hover:opacity-75 transition-opacity" />
 
-      {/* Inspection Mode HUD Card Overlay */}
+      {/* Inspection Mode HUD */}
       {isInspecting && inspectCellInfo && (
         <div className="absolute top-4 z-30 flex items-center gap-4 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-xl text-slate-200 animate-in fade-in duration-300">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
@@ -315,7 +381,7 @@ export default function LifeCanvas() {
         </div>
       )}
 
-      {/* Screen shake alert badge if live pop > 350 */}
+      {/* Screen shake alert badge */}
       {shouldShake && (
         <div className="absolute top-4 z-20 px-3 py-1 bg-rose-500/90 text-slate-950 font-extrabold text-[10px] uppercase tracking-widest rounded-full shadow-lg animate-pulse">
           ⚡ Screen-Shake: Extreme Population Surge ({liveCount})!
@@ -333,7 +399,11 @@ export default function LifeCanvas() {
       {/* Grid Legend & Axis tag */}
       <div className="flex items-center justify-between w-full mt-3 px-2 text-[11px] text-slate-400 font-mono relative z-10">
         <span className="flex items-center gap-1.5">
-          {isInspecting ? (
+          {gameMode === 'artillery' ? (
+            <span className="text-rose-400 font-extrabold flex items-center gap-1">
+              <Crosshair size={12} /> Aiming: Click Border to Position Launcher
+            </span>
+          ) : isInspecting ? (
             <span className="text-amber-400 font-extrabold flex items-center gap-1">
               <Eye size={12} /> Inspecting Seed Construction...
             </span>

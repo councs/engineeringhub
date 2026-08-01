@@ -2,9 +2,15 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Dices } from 'lucide-react';
+import { useRngdleStore } from '@/lib/store/useRngdleStore';
+import { ArrowLeft, Dices, Target, FlaskConical } from 'lucide-react';
 
 const SeedControls = dynamic(() => import('@/components/rngdle-life/SeedControls'), {
+  ssr: false,
+  loading: () => <div className="w-full h-32 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse" />,
+});
+
+const ArtilleryControls = dynamic(() => import('@/components/rngdle-life/ArtilleryControls'), {
   ssr: false,
   loading: () => <div className="w-full h-32 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse" />,
 });
@@ -19,9 +25,19 @@ const AnalyticsDashboard = dynamic(() => import('@/components/rngdle-life/Analyt
   loading: () => <div className="w-full h-48 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse" />,
 });
 
+const ArtilleryVictoryModal = dynamic(() => import('@/components/rngdle-life/ArtilleryVictoryModal'), {
+  ssr: false,
+});
+
 export default function RngdleLifePage() {
+  const { gameMode, setGameMode } = useRngdleStore();
+
   return (
     <div className="min-h-screen bg-slate-950 p-6 md:p-12 font-sans text-slate-100 flex flex-col items-center selection:bg-sky-500/30">
+      
+      {/* Artillery Victory Modal */}
+      <ArtilleryVictoryModal />
+
       <div className="max-w-6xl w-full flex flex-col gap-8">
         
         {/* Header */}
@@ -40,7 +56,7 @@ export default function RngdleLifePage() {
                 RNGdle + Game of Life Simulator
               </h1>
               <p className="text-slate-400 text-lg md:text-xl max-w-2xl font-light">
-                A 100% deterministic, PRNG-seeded Conway simulation engine with 2-way symmetry, fast-forward analytics, and Wordle-style score sharing.
+                A 100% deterministic PRNG Conway engine with 2-way symmetry, Seed Inspector, and Glider Artillery destruction mode.
               </p>
             </div>
             
@@ -49,11 +65,37 @@ export default function RngdleLifePage() {
               <span>Route: /projects/rngdle-life (Secret)</span>
             </div>
           </div>
+
+          {/* GAME MODE SELECTION TABS */}
+          <div className="flex items-center gap-3 mt-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800 w-fit">
+            <button
+              onClick={() => setGameMode('classic')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all ${
+                gameMode === 'classic'
+                  ? 'bg-sky-500 text-slate-950 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <FlaskConical size={16} /> Classic Seed Simulator
+            </button>
+
+            <button
+              onClick={() => setGameMode('artillery')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all ${
+                gameMode === 'artillery'
+                  ? 'bg-rose-500 text-slate-950 shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Target size={16} /> Glider Artillery Destruction Mode
+            </button>
+          </div>
+
         </header>
 
         {/* Main Simulator Layout */}
         <main className="flex flex-col items-center gap-8 w-full animate-in fade-in slide-in-from-bottom-8 duration-700">
-          <SeedControls />
+          {gameMode === 'artillery' ? <ArtilleryControls /> : <SeedControls />}
           <LifeCanvas />
           <AnalyticsDashboard />
         </main>
