@@ -22,7 +22,7 @@ export interface TraitBadge {
   rarityTier: 1 | 2 | 3;
   bonusPoints: number;
   ruleUnlocked: string;
-  matchedSubstring: string; // e.g. "67", "0000", "420", "101010"
+  matchedSubstring: string;
 }
 
 export interface AppliedTraitInfo {
@@ -195,17 +195,19 @@ export function evaluateSeedTraits(seedStr: string): {
 
   const num = parseInt(seedStr, 10);
 
-  // Find exact matched substrings
+  // 1. Find exact matched zero sequences
   let matchedZero = '';
   if (seedStr.includes('0000')) matchedZero = '0000';
   else if (seedStr.includes('000')) matchedZero = '000';
 
+  // 2. Find exact matched meme numbers (420, 69, 67, 777)
   let matchedMeme = '';
   if (seedStr.includes('420')) matchedMeme = '420';
   else if (seedStr.includes('69')) matchedMeme = '69';
   else if (seedStr.includes('67')) matchedMeme = '67';
   else if (seedStr.includes('777')) matchedMeme = '777';
 
+  // 3. Find exact matched binary/ascending pattern sequences
   let matchedPattern = '';
   if (seedStr.includes('101010')) matchedPattern = '101010';
   else if (seedStr.includes('111000')) matchedPattern = '111000';
@@ -214,7 +216,7 @@ export function evaluateSeedTraits(seedStr: string): {
 
   const isMemePalindrome = seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('') && (seedStr.includes('420') || seedStr.includes('69'));
   
-  // Tier 3: Quad Zeros or Meme Palindromes
+  // Tier 3: Quad Zeros or Meme Palindromes (~0.1% chance)
   if (matchedZero === '0000' || isMemePalindrome || num === 0) {
     maxTier = 3;
     ruleMode = 'B368/S23 (Replicator Overdrive)';
@@ -231,7 +233,7 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Tier 2: Binary & Pattern Sequences
+  // Tier 2: Binary & Pattern Sequences (~3% chance)
   if (matchedPattern) {
     if (maxTier < 2) {
       maxTier = 2;
@@ -269,7 +271,77 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Palindrome
+  // 4. NEW FEATURE: Triplets (3 of a kind e.g. 444, 999, 333)
+  const tripletMatch = seedStr.match(/(.)\1\1/);
+  if (tripletMatch && matchedMeme !== '777' && matchedZero !== '000' && matchedZero !== '0000') {
+    const tripDigit = tripletMatch[1];
+    if (maxTier < 2) {
+      maxTier = 2;
+      ruleMode = 'B357/S23 (Pattern Shift)';
+    }
+    traits.push({
+      id: 'triple_cluster',
+      name: `Triple Cluster "${tripDigit}${tripDigit}${tripDigit}"`,
+      emoji: '🎰',
+      description: `Contains 3 consecutive identical digits ("${tripDigit}${tripDigit}${tripDigit}")`,
+      color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50',
+      rarityTier: 2,
+      bonusPoints: 350,
+      ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & Triple Cluster (+350 pts)',
+      matchedSubstring: `${tripDigit}${tripDigit}${tripDigit}`,
+    });
+  }
+
+  // 5. NEW FEATURE: Pair Combos (Two Pair & Triple Pair Super Combos e.g. 2255, 2233440)
+  const pairs = seedStr.match(/(.)\1/g) || [];
+  const uniquePairs = Array.from(new Set(pairs));
+
+  if (uniquePairs.length >= 3) {
+    if (maxTier < 2) {
+      maxTier = 2;
+    }
+    traits.push({
+      id: 'triple_pair_combo',
+      name: 'Triple Pair Super Combo',
+      emoji: '👑',
+      description: `Contains 3 separate pairs ("${uniquePairs.join(', ')}")`,
+      color: 'bg-gradient-to-r from-amber-500/30 to-purple-500/30 text-amber-300 border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.3)]',
+      rarityTier: 2,
+      bonusPoints: 650,
+      ruleUnlocked: 'Unlocked 48x48 Grid & Triple Pair Super Combo (+650 pts)',
+      matchedSubstring: uniquePairs.join(' & '),
+    });
+  } else if (uniquePairs.length === 2) {
+    traits.push({
+      id: 'two_pair_combo',
+      name: `Two Pair Combo (${uniquePairs.join(' & ')})`,
+      emoji: '👯',
+      description: `Contains two separate pairs ("${uniquePairs.join(' & ')}")`,
+      color: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
+      rarityTier: 2,
+      bonusPoints: 220,
+      ruleUnlocked: 'Unlocked Two Pair Combo (+220 pts)',
+      matchedSubstring: uniquePairs.join(' & '),
+    });
+  }
+
+  // 6. NEW FEATURE: Round Number Finishing Touch (ends in '0' or '5')
+  if (seedStr.endsWith('0') || seedStr.endsWith('5')) {
+    const endDigit = seedStr.slice(-1);
+    traits.push({
+      id: 'round_number',
+      name: `Round Ending (${endDigit})`,
+      emoji: '🎯',
+      description: `Ends in "${endDigit}" (Round number finishing touch)`,
+      color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+      rarityTier: 1,
+      bonusPoints: 75,
+      ruleUnlocked: 'Round Number Bonus (+75 pts)',
+      matchedSubstring: endDigit,
+    });
+  }
+
+  // 7. Palindrome
   if (seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('')) {
     traits.push({
       id: 'palindrome',
@@ -284,7 +356,7 @@ export function evaluateSeedTraits(seedStr: string): {
     });
   }
 
-  // Extreme digits
+  // 8. Extreme digits
   const isAllEven = /^[02468]+$/.test(seedStr);
   const isAllOdd = /^[13579]+$/.test(seedStr);
   if (isAllEven || isAllOdd || num < 1000) {
@@ -312,7 +384,7 @@ export function evaluateSeedTraits(seedStr: string): {
     podCount = 4;
     fillDensity = 0.42;
     theme = 'Golden Solar';
-  } else if (matchedMeme || matchedPattern || matchedZero) {
+  } else if (matchedMeme || matchedPattern || matchedZero || uniquePairs.length >= 2 || tripletMatch) {
     gridSize = 48;
     podCount = 2;
     fillDensity = 0.32;
