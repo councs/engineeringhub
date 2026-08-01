@@ -7,8 +7,6 @@ export type SeedRating = 'Common' | 'Rare' | 'Legendary' | 'Mythic';
 
 export type RuleMode = 'B3/S23 (Conway)' | 'B36/S23 (HighLife)' | 'B357/S23 (Pattern Shift)' | 'B368/S23 (Replicator Overdrive)';
 
-export type ClassArchetype = 'Archmage Cloning Engine' | 'Supernova' | 'Starship Fleet' | 'The Fortress';
-
 export type ThemePalette = 'Terminal Green' | 'Cyberpunk Neon' | 'Golden Solar';
 
 export type ProjectileType = 'glider' | 'lwss';
@@ -24,6 +22,7 @@ export interface TraitBadge {
   rarityTier: 1 | 2 | 3;
   bonusPoints: number;
   ruleUnlocked: string;
+  matchedSubstring: string; // e.g. "67", "0000", "420", "101010"
 }
 
 export interface AppliedTraitInfo {
@@ -34,6 +33,7 @@ export interface AppliedTraitInfo {
   bonusPoints: number;
   color: string;
   ruleUnlocked: string;
+  matchedSubstring: string;
 }
 
 export interface ScoreBreakdown {
@@ -46,12 +46,6 @@ export interface ScoreBreakdown {
   multiplier: number;
   percentile: string;
   appliedTraits: AppliedTraitInfo[];
-}
-
-export interface ArchetypeInfo {
-  title: ClassArchetype;
-  emoji: string;
-  description: string;
 }
 
 export interface FastEvalResult {
@@ -67,7 +61,6 @@ export interface FastEvalResult {
   gridSize: number;
   podCount: number;
   theme: ThemePalette;
-  archetype: ArchetypeInfo;
   traits: TraitBadge[];
   breakdown: ScoreBreakdown;
 }
@@ -113,7 +106,7 @@ export interface RngdleState {
   isPlaying: boolean;
   isSettled: boolean;
   settledInfo: SettledInfo | null;
-  speed: number; // 1 to 100
+  speed: number;
   isMuted: boolean;
   autoPauseOnSettled: boolean;
   
@@ -187,7 +180,7 @@ function speedToDelayMs(speedVal: number): number {
   return Math.max(10, Math.round(210 - clamped * 2));
 }
 
-// Evaluate Seed Traits
+// Evaluate Seed Traits & Highlight Matching Substrings
 export function evaluateSeedTraits(seedStr: string): { 
   traits: TraitBadge[]; 
   ruleMode: RuleMode; 
@@ -202,84 +195,110 @@ export function evaluateSeedTraits(seedStr: string): {
 
   const num = parseInt(seedStr, 10);
 
-  const isQuadZero = seedStr.includes('0000');
+  // Find exact matched substrings
+  let matchedZero = '';
+  if (seedStr.includes('0000')) matchedZero = '0000';
+  else if (seedStr.includes('000')) matchedZero = '000';
+
+  let matchedMeme = '';
+  if (seedStr.includes('420')) matchedMeme = '420';
+  else if (seedStr.includes('69')) matchedMeme = '69';
+  else if (seedStr.includes('67')) matchedMeme = '67';
+  else if (seedStr.includes('777')) matchedMeme = '777';
+
+  let matchedPattern = '';
+  if (seedStr.includes('101010')) matchedPattern = '101010';
+  else if (seedStr.includes('111000')) matchedPattern = '111000';
+  else if (seedStr.includes('000111')) matchedPattern = '000111';
+  else if (seedStr.includes('123456')) matchedPattern = '123456';
+
   const isMemePalindrome = seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('') && (seedStr.includes('420') || seedStr.includes('69'));
   
-  if (isQuadZero || isMemePalindrome || num === 0) {
+  // Tier 3: Quad Zeros or Meme Palindromes
+  if (matchedZero === '0000' || isMemePalindrome || num === 0) {
     maxTier = 3;
     ruleMode = 'B368/S23 (Replicator Overdrive)';
     traits.push({
       id: 'replicator_overdrive',
-      name: 'Replicator Overdrive',
+      name: 'Quad Zero / Meme Overdrive',
       emoji: '🌌',
-      description: 'Ultra-rare Quad zero/Meme-palindrome',
+      description: 'Contains 0000 or Meme-palindrome',
       color: 'bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-pink-300 border-pink-500/60 shadow-[0_0_15px_rgba(236,72,153,0.4)]',
       rarityTier: 3,
       bonusPoints: 1500,
       ruleUnlocked: 'Unlocked 64x64 Grid (4 Corner Pods) & Replicator Overdrive B368/S23',
+      matchedSubstring: matchedZero === '0000' ? '0000' : seedStr,
     });
   }
 
-  const isBinaryPattern = seedStr.includes('101010') || seedStr.includes('111000') || seedStr.includes('000111') || seedStr.includes('123456');
-  if (isBinaryPattern) {
+  // Tier 2: Binary & Pattern Sequences
+  if (matchedPattern) {
     if (maxTier < 2) {
       maxTier = 2;
       ruleMode = 'B357/S23 (Pattern Shift)';
     }
     traits.push({
       id: 'pattern_shift',
-      name: 'Pattern Shift',
+      name: `Pattern "${matchedPattern}"`,
       emoji: '⚡',
-      description: 'Binary pattern sequence',
+      description: `Contains repeating sequence "${matchedPattern}"`,
       color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50',
       rarityTier: 2,
       bonusPoints: 450,
       ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & Pattern Shift B357/S23',
+      matchedSubstring: matchedPattern,
     });
   }
 
-  const isMemeDigit = seedStr.includes('420') || seedStr.includes('69') || seedStr.includes('67') || seedStr.includes('777') || seedStr.includes('000');
-  if (isMemeDigit) {
+  // Tier 1: Meme Numbers (420, 69, 67, 777, 000)
+  if (matchedMeme || matchedZero === '000') {
     if (maxTier < 1) {
       ruleMode = 'B36/S23 (HighLife)';
     }
+    const matchStr = matchedMeme || matchedZero;
     traits.push({
       id: 'highlife_meme',
-      name: 'HighLife Mutator',
+      name: `Meme Digit "${matchStr}"`,
       emoji: '💥',
-      description: 'Contains 420, 69, 67, 777, or 000',
+      description: `Contains special meme digits "${matchStr}"`,
       color: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
       rarityTier: 1,
       bonusPoints: 150,
-      ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & HighLife B36/S23 (Replicators)',
+      ruleUnlocked: 'Unlocked 48x48 Grid (2 Corner Pods) & HighLife B36/S23 (Spawns Replicators!)',
+      matchedSubstring: matchStr,
     });
   }
 
+  // Palindrome
   if (seedStr.length === 7 && seedStr === seedStr.split('').reverse().join('')) {
     traits.push({
       id: 'palindrome',
-      name: 'Palindrome',
+      name: 'Palindrome Seed',
       emoji: '🔄',
       description: 'Reads identically forwards and backwards',
       color: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
       rarityTier: 2,
       bonusPoints: 300,
       ruleUnlocked: 'Unlocked Symmetrical Palindrome Bonus (+300 pts)',
+      matchedSubstring: seedStr,
     });
   }
 
+  // Extreme digits
   const isAllEven = /^[02468]+$/.test(seedStr);
   const isAllOdd = /^[13579]+$/.test(seedStr);
   if (isAllEven || isAllOdd || num < 1000) {
+    const extDesc = isAllEven ? 'All Even Digits' : isAllOdd ? 'All Odd Digits' : 'Low Magnitude (< 1000)';
     traits.push({
       id: 'extreme',
       name: 'Extreme Digit',
       emoji: '🌋',
-      description: 'All even, all odd, or low magnitude seed',
+      description: extDesc,
       color: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
       rarityTier: 2,
       bonusPoints: 250,
       ruleUnlocked: 'Unlocked Extreme Digit Multiplier (+250 pts)',
+      matchedSubstring: seedStr,
     });
   }
 
@@ -293,7 +312,7 @@ export function evaluateSeedTraits(seedStr: string): {
     podCount = 4;
     fillDensity = 0.42;
     theme = 'Golden Solar';
-  } else if (isMemeDigit || isBinaryPattern) {
+  } else if (matchedMeme || matchedPattern || matchedZero) {
     gridSize = 48;
     podCount = 2;
     fillDensity = 0.32;
@@ -470,41 +489,6 @@ function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: Ru
   return neighbors === 3;
 }
 
-// Evaluate Class Archetype
-export function evaluateClassArchetype(
-  ruleMode: RuleMode, 
-  peakPop: number, 
-  chaosSD: number, 
-  isStatic: boolean
-): ArchetypeInfo {
-  if (ruleMode.includes('HighLife') || ruleMode.includes('Replicator')) {
-    return {
-      title: 'Archmage Cloning Engine',
-      emoji: '🧙‍♂️',
-      description: 'HighLife rules active spawning exponential diagonal Replicators!',
-    };
-  }
-  if (peakPop >= 300) {
-    return {
-      title: 'Supernova',
-      emoji: '⚡',
-      description: 'Massive population surge exceeding 300 live cells!',
-    };
-  }
-  if (chaosSD >= 70) {
-    return {
-      title: 'Starship Fleet',
-      emoji: '🚀',
-      description: 'High population motion and kinetic glider dynamics!',
-    };
-  }
-  return {
-    title: 'The Fortress',
-    emoji: '🛡️',
-    description: 'Low-variance defensive structure or static equilibrium.',
-  };
-}
-
 export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   const { grid: initialGrid, fillDensity, ruleMode, gridSize, podCount, theme } = generateSymmetricalGrid(seedStr);
   let currentGrid = initialGrid.map(row => [...row]);
@@ -596,8 +580,6 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     percentile = 'Top 14.5% Rare Seed!';
   }
 
-  const archetype = evaluateClassArchetype(ruleMode, peakPop, chaosVariance, period === 1);
-
   const appliedTraits: AppliedTraitInfo[] = traits.map(t => ({
     id: t.id,
     name: t.name,
@@ -606,6 +588,7 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     bonusPoints: t.bonusPoints,
     color: t.color,
     ruleUnlocked: t.ruleUnlocked,
+    matchedSubstring: t.matchedSubstring,
   }));
 
   return {
@@ -621,7 +604,6 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     gridSize,
     podCount,
     theme,
-    archetype,
     traits,
     breakdown: {
       baseScore,
@@ -1312,16 +1294,15 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       if (!res) return '';
 
       const ratingEmoji = res.rating === 'Mythic' ? '🌟' : res.rating === 'Legendary' ? '🔥' : res.rating === 'Rare' ? '💎' : '⚙️';
-      const traitsStr = res.traits.map(t => `${t.name} ${t.emoji}`).join(' | ') || 'Standard Seed';
+      const traitsStr = res.traits.map(t => `${t.name} (${t.matchedSubstring})`).join(' | ') || 'Standard Seed';
       const liveSettledStr = state.settledInfo ? ` | Settled: ${state.settledInfo.reason}` : '';
 
       return [
         `🧬 RNGdle Life #${res.seed}`,
         `Rank: ${res.breakdown.percentile}`,
-        `Archetype: ${res.archetype.emoji} ${res.archetype.title}`,
         `Rating: ${res.rating} ${ratingEmoji} (Power Score: ${res.score})`,
         `Grid: ${res.gridSize}x${res.gridSize} (${res.podCount} Pods) | Rule: ${res.ruleMode}`,
-        `Traits: ${traitsStr}`,
+        `Matched Seed Bonuses: ${traitsStr}`,
         `Run Time to Loop: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,
         `Live Run: Gen ${state.generation}${liveSettledStr}`,

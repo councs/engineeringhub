@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers, ChevronDown, ChevronUp, Zap, Trophy, Grid } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Layers, ChevronDown, ChevronUp, Zap, Trophy, Grid, Sparkle } from 'lucide-react';
 
 function ScoreTicker({ targetScore, rating }: { targetScore: number; rating: string }) {
   const [displayScore, setDisplayScore] = useState(0);
@@ -100,8 +100,6 @@ export default function AnalyticsDashboard() {
     appliedTraits: [],
   };
 
-  const archetype = evalResult?.archetype;
-
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
       
@@ -136,28 +134,39 @@ export default function AnalyticsDashboard() {
         </div>
       )}
 
-      {/* Top Header: Class Archetype Title & Share Button */}
+      {/* SEED MUTATOR HIGHLIGHTS HEADER */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-        <div className="flex items-center gap-3">
-          {archetype ? (
-            <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-purple-950/80 to-slate-950 border border-purple-500/40 rounded-xl shadow-md">
-              <span className="text-2xl">{archetype.emoji}</span>
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-extrabold tracking-widest text-purple-300">Class Archetype</span>
-                <span className="text-base font-extrabold text-slate-100">{archetype.title}</span>
+        
+        {/* Seed Matched Substring Badges */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 text-sky-400 font-bold text-sm mr-1">
+            <Zap size={18} />
+            <span>Seed Highlights:</span>
+          </div>
+
+          {bd.appliedTraits && bd.appliedTraits.length > 0 ? (
+            bd.appliedTraits.map((trait) => (
+              <div
+                key={trait.id}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-950/80 border border-slate-700/80 rounded-xl text-xs font-extrabold shadow-sm"
+              >
+                <span>{trait.emoji}</span>
+                <span className="text-slate-200">{trait.name}</span>
+                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] border border-amber-500/40">
+                  "{trait.matchedSubstring}" (+{trait.bonusPoints} pts)
+                </span>
               </div>
-            </div>
+            ))
           ) : (
-            <div className="flex items-center gap-2">
-              <Sparkles className="text-sky-400" size={22} />
-              <h3 className="text-lg font-bold tracking-wide text-slate-100">Seed Analytics & Rating</h3>
+            <div className="px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-950/60 text-slate-400 text-xs font-medium flex items-center gap-2">
+              <span>⚙️ Standard Seed (Conway B3/S23)</span>
             </div>
           )}
         </div>
 
         <button
           onClick={handleShare}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs rounded-xl transition-all border border-slate-700 shadow-md"
+          className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-xs rounded-xl transition-all border border-slate-700 shadow-md shrink-0"
         >
           {copied ? (
             <>
@@ -320,17 +329,20 @@ export default function AnalyticsDashboard() {
               {/* Trait Bonuses Unlocked */}
               <div className="flex flex-col p-3 bg-slate-900/80 rounded-lg border border-slate-800 gap-2">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">
-                  Trait Bonuses Unlocked (+{bd.traitPoints || 0} pts)
+                  Matched Seed Bonuses (+{bd.traitPoints || 0} pts)
                 </span>
 
                 {bd.appliedTraits && bd.appliedTraits.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     {bd.appliedTraits.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between text-[11px] p-1.5 rounded bg-slate-950/60 border border-slate-800">
-                        <span className="font-semibold text-slate-200 flex items-center gap-1">
-                          <span>{t.emoji}</span> {t.name}
-                        </span>
-                        <span className="font-mono font-bold text-amber-400">+{t.bonusPoints} pts</span>
+                      <div key={t.id} className="flex items-center justify-between text-[11px] p-2 rounded bg-slate-950/60 border border-slate-800">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-200 flex items-center gap-1">
+                            <span>{t.emoji}</span> {t.name}
+                          </span>
+                          <span className="text-[10px] text-sky-400 font-mono mt-0.5">Matched "{t.matchedSubstring}"</span>
+                        </div>
+                        <span className="font-mono font-bold text-amber-400 text-xs">+{t.bonusPoints} pts</span>
                       </div>
                     ))}
                   </div>
