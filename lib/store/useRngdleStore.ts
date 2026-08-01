@@ -45,6 +45,17 @@ export interface SettledInfo {
   generation: number;
 }
 
+export interface InspectCellInfo {
+  row: number;
+  col: number;
+  mirroredCol: number;
+  index: number; // 0 to 511
+  totalCells: number; // 512
+  prngVal: number;
+  threshold: number;
+  isAlive: boolean;
+}
+
 export interface RngdleState {
   // Core state
   seed: string;
@@ -55,10 +66,16 @@ export interface RngdleState {
   isPlaying: boolean;
   isSettled: boolean;
   settledInfo: SettledInfo | null;
-  speed: number;
+  speed: number; // 1 (Slowest / 200ms) to 100 (Fastest / 10ms) -- Right is Faster!
   isMuted: boolean;
-  autoPauseOnSettled: boolean; // Controls whether active oscillator loops auto-stop or keep animating
+  autoPauseOnSettled: boolean;
   
+  // Seed Inspector State
+  isInspecting: boolean;
+  inspectStep: number; // 0 to 512
+  inspectAutoPlay: boolean;
+  inspectCellInfo: InspectCellInfo | null;
+
   // Analytics & Evaluation
   evalResult: FastEvalResult | null;
   peakPopulation: number;
@@ -74,10 +91,19 @@ export interface RngdleState {
   setSpeed: (speed: number) => void;
   toggleMute: () => void;
   toggleAutoPause: () => void;
+  
+  // Inspector Actions
+  startInspection: () => void;
+  exitInspection: () => void;
+  setInspectStep: (step: number) => void;
+  stepInspection: (dir: 1 | -1) => void;
+  toggleInspectAutoPlay: () => void;
+  
   generateShareText: () => string;
 }
 
 const GRID_SIZE = 32;
+const INSPECT_TOTAL_CELLS = 512; // 32 rows * 16 left cols
 
 // Mulberry32 deterministic PRNG
 function mulberry32(a: number) {
@@ -87,6 +113,12 @@ function mulberry32(a: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// Convert 1-100 speed scale to millisecond delay (Right = Faster!)
+function speedToDelayMs(speedVal: number): number {
+  const clamped = Math.max(1, Math.min(100, speedVal));
+  return Math.max(10, Math.round(210 - clamped * 2));
 }
 
 // Expanded Rule Mutators & Mathematical Rarity Evaluator
@@ -212,6 +244,48 @@ function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: 
   }
 
   return { grid, ageGrid, fillDensity, ruleMode };
+}
+
+// Compute inspection grid & cell info up to stepIndex (0 to 512)
+function computeInspectionState(seedStr: string, stepIndex: number): { grid: number[][]; ageGrid: number[][]; cellInfo: InspectCellInfo | null } {
+  const seedNum = parseInt(seedStr, 10) || 1234567;
+  const prng = mulberry32(seedNum);
+  const { fillDensity } = evaluateSeedTraits(seedStr);
+
+  const grid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+  const ageGrid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+
+  let cellInfo: InspectCellInfo | null = null;
+  const clampedStep = Math.max(0, Math.min(INSPECT_TOTAL_CELLS, stepIndex));
+
+  for (let i = 0; i < clampedStep; i++) {
+    const r = Math.floor(i / 16);
+    const c = i % 16;
+    const randVal = prng();
+    const isAlive = randVal < fillDensity;
+
+    grid[r][c] = isAlive ? 1 : 0;
+    ageGrid[r][c] = isAlive ? 1 : 0;
+
+    const mirroredCol = GRID_SIZE - 1 - c;
+    grid[r][mirroredCol] = isAlive ? 1 : 0;
+    ageGrid[r][mirroredCol] = isAlive ? 1 : 0;
+
+    if (i === clampedStep - 1) {
+      cellInfo = {
+        row: r,
+        col: c,
+        mirroredCol,
+        index: i,
+        totalCells: INSPECT_TOTAL_CELLS,
+        prngVal: Number(randVal.toFixed(4)),
+        threshold: Number(fillDensity.toFixed(4)),
+        isAlive,
+      };
+    }
+  }
+
+  return { grid, ageGrid, cellInfo };
 }
 
 function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: RuleMode): boolean {
@@ -340,6 +414,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
   const initialEval = runFastForwardEvaluation(initialSeed);
 
   let timerId: NodeJS.Timeout | null = null;
+  let inspectTimerId: NodeJS.Timeout | null = null;
   const liveSeenHashes = new Map<string, number>();
 
   const runTick = () => {
@@ -385,7 +460,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     let settledInfo: SettledInfo | null = null;
     let isHardStaticStop = false;
 
-    // 1. Extinction check (0 live cells)
     if (liveCount === 0) {
       isSettled = true;
       isHardStaticStop = true;
@@ -394,9 +468,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         reason: 'Extinction: All cells have died out (0 Live Cells).',
         generation: state.generation + 1,
       };
-    }
-    // 2. Hard Static Equilibrium check (0 grid changes / Period 1)
-    else if (currentGridKey === nextGridKey) {
+    } else if (currentGridKey === nextGridKey) {
       isSettled = true;
       isHardStaticStop = true;
       settledInfo = {
@@ -405,9 +477,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         period: 1,
         generation: state.generation,
       };
-    }
-    // 3. Oscillator Loop repetition check (Period > 1 - Blinking/pulsing animation)
-    else if (liveSeenHashes.has(nextGridKey)) {
+    } else if (liveSeenHashes.has(nextGridKey)) {
       const prevGen = liveSeenHashes.get(nextGridKey)!;
       const period = (state.generation + 1) - prevGen;
       isSettled = true;
@@ -419,7 +489,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       };
     }
 
-    // HARD STATIC STOP: If 0 grid changes occur or extinction happens, stop incrementing generation tick count immediately!
     if (isHardStaticStop) {
       if (timerId) clearTimeout(timerId);
       set({
@@ -437,7 +506,6 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     soundEngine.playTickBeep(liveCount, state.isMuted);
     liveSeenHashes.set(nextGridKey, nextGen);
 
-    // Oscillator Loop check: auto-pause ONLY if autoPauseOnSettled is enabled, else keep animating!
     if (isSettled && settledInfo?.type === 'loop') {
       const shouldPause = state.autoPauseOnSettled;
       set({
@@ -468,7 +536,29 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     }
 
     if (state.isPlaying) {
-      timerId = setTimeout(runTick, state.speed);
+      const delay = speedToDelayMs(state.speed);
+      timerId = setTimeout(runTick, delay);
+    }
+  };
+
+  const runInspectAutoTick = () => {
+    const state = get();
+    if (!state.isInspecting || !state.inspectAutoPlay) return;
+
+    if (state.inspectStep >= INSPECT_TOTAL_CELLS) {
+      set({ inspectAutoPlay: false });
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+      return;
+    }
+
+    const nextStep = state.inspectStep + 1;
+    state.setInspectStep(nextStep);
+
+    if (get().inspectAutoPlay && nextStep < INSPECT_TOTAL_CELLS) {
+      const delay = speedToDelayMs(get().speed);
+      inspectTimerId = setTimeout(runInspectAutoTick, delay);
+    } else if (nextStep >= INSPECT_TOTAL_CELLS) {
+      set({ inspectAutoPlay: false });
     }
   };
 
@@ -481,9 +571,16 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     isPlaying: false,
     isSettled: false,
     settledInfo: null,
-    speed: 50, // 50ms tick
+    speed: 80, // Default 80 = Fast (Right is Faster!)
     isMuted: false,
     autoPauseOnSettled: false,
+    
+    // Inspection State
+    isInspecting: false,
+    inspectStep: 0,
+    inspectAutoPlay: false,
+    inspectCellInfo: null,
+
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
@@ -494,6 +591,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const evalRes = runFastForwardEvaluation(cleanSeed);
 
       if (timerId) clearTimeout(timerId);
+      if (inspectTimerId) clearTimeout(inspectTimerId);
       liveSeenHashes.clear();
       const initialKey = grid.map(row => row.join('')).join('');
       liveSeenHashes.set(initialKey, 0);
@@ -508,6 +606,10 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         ageGrid,
         generation: 0,
         isPlaying: false,
+        isInspecting: false,
+        inspectStep: 0,
+        inspectAutoPlay: false,
+        inspectCellInfo: null,
         isSettled: false,
         settledInfo: null,
         evalResult: evalRes,
@@ -522,13 +624,14 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     },
 
     play: () => {
+      if (get().isInspecting) {
+        get().exitInspection();
+      }
+
       if (get().isPlaying) return;
 
-      // If grid is in a hard static stop (0 changes), do not restart tick counter unless grid is modified or reset
       const state = get();
       if (state.isSettled && state.settledInfo?.type === 'static') {
-        const currentKey = state.grid.map(row => row.join('')).join('');
-        // Calculate 1 tick
         const ruleMode = state.evalResult?.ruleMode || 'B3/S23 (Conway)';
         let changes = 0;
         for (let r = 0; r < GRID_SIZE; r++) {
@@ -549,7 +652,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         }
 
         if (changes === 0) {
-          return; // Hard static stop: 0 changes, refuse to increment ticks pointlessly!
+          return;
         }
       }
 
@@ -557,15 +660,18 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         set({ isSettled: false, settledInfo: null });
       }
       set({ isPlaying: true });
-      timerId = setTimeout(runTick, get().speed);
+      const delay = speedToDelayMs(get().speed);
+      timerId = setTimeout(runTick, delay);
     },
 
     pause: () => {
       if (timerId) clearTimeout(timerId);
-      set({ isPlaying: false });
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+      set({ isPlaying: false, inspectAutoPlay: false });
     },
 
     step: () => {
+      if (get().isInspecting) get().exitInspection();
       if (get().isPlaying) get().pause();
       runTick();
     },
@@ -573,6 +679,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     reset: () => {
       const state = get();
       if (timerId) clearTimeout(timerId);
+      if (inspectTimerId) clearTimeout(inspectTimerId);
       const { grid, ageGrid } = generateSymmetricalGrid(state.seed);
 
       liveSeenHashes.clear();
@@ -584,6 +691,10 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         ageGrid,
         generation: 0,
         isPlaying: false,
+        isInspecting: false,
+        inspectStep: 0,
+        inspectAutoPlay: false,
+        inspectCellInfo: null,
         isSettled: false,
         settledInfo: null,
         popHistory: [state.evalResult?.peakPopulation || 0],
@@ -601,6 +712,80 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     toggleAutoPause: () => {
       set((state) => ({ autoPauseOnSettled: !state.autoPauseOnSettled }));
+    },
+
+    // Seed Inspector Actions
+    startInspection: () => {
+      const state = get();
+      if (timerId) clearTimeout(timerId);
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+
+      const { grid, ageGrid, cellInfo } = computeInspectionState(state.seed, 1);
+
+      set({
+        isPlaying: false,
+        isInspecting: true,
+        inspectStep: 1,
+        inspectAutoPlay: false,
+        grid,
+        ageGrid,
+        inspectCellInfo: cellInfo,
+      });
+
+      if (cellInfo) {
+        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, INSPECT_TOTAL_CELLS, state.isMuted);
+      }
+    },
+
+    exitInspection: () => {
+      const state = get();
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+      const { grid, ageGrid } = generateSymmetricalGrid(state.seed);
+
+      set({
+        isInspecting: false,
+        inspectStep: 0,
+        inspectAutoPlay: false,
+        inspectCellInfo: null,
+        grid,
+        ageGrid,
+      });
+    },
+
+    setInspectStep: (stepIndex) => {
+      const state = get();
+      const clampedStep = Math.max(0, Math.min(INSPECT_TOTAL_CELLS, stepIndex));
+      const { grid, ageGrid, cellInfo } = computeInspectionState(state.seed, clampedStep);
+
+      if (cellInfo) {
+        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, INSPECT_TOTAL_CELLS, state.isMuted);
+      }
+
+      set({
+        inspectStep: clampedStep,
+        grid,
+        ageGrid,
+        inspectCellInfo: cellInfo,
+      });
+    },
+
+    stepInspection: (dir) => {
+      const state = get();
+      const targetStep = state.inspectStep + dir;
+      state.setInspectStep(targetStep);
+    },
+
+    toggleInspectAutoPlay: () => {
+      const state = get();
+      const nextState = !state.inspectAutoPlay;
+
+      if (inspectTimerId) clearTimeout(inspectTimerId);
+      set({ inspectAutoPlay: nextState });
+
+      if (nextState) {
+        const delay = speedToDelayMs(state.speed);
+        inspectTimerId = setTimeout(runInspectAutoTick, delay);
+      }
     },
 
     generateShareText: () => {

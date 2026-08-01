@@ -36,14 +36,12 @@ class SoundEngine {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      // Map population (0 to 600) to pitch frequency (200Hz to 900Hz)
       const clampedPop = Math.max(0, Math.min(600, livePopulation));
       const freq = 200 + (clampedPop / 600) * 700;
 
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
-      // Gentle gain envelope (duration 35ms)
       gain.gain.setValueAtTime(0.04, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
 
@@ -52,6 +50,50 @@ class SoundEngine {
 
       osc.start();
       osc.stop(ctx.currentTime + 0.035);
+    } catch {
+      // Ignore web audio context restrictions
+    }
+  }
+
+  // Inspection Scan Audio Beep (Crisp chime for ALIVE cell, soft low tick for DEAD cell)
+  public playInspectCellBeep(isAlive: boolean, stepIndex: number, totalSteps: number = 512, isMutedOverride?: boolean) {
+    if (this.isMuted || isMutedOverride) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (isAlive) {
+        // High-pitched ascending chime
+        const baseFreq = 523.25; // C5
+        const pitchShift = (stepIndex / totalSteps) * 380;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(baseFreq + pitchShift, ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.05);
+      } else {
+        // Soft low woodblock tick
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(160, ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.015, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.02);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.02);
+      }
     } catch {
       // Ignore web audio context restrictions
     }

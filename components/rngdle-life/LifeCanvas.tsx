@@ -2,10 +2,19 @@
 
 import { useEffect, useRef } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
+import { Search, Eye, Sparkles } from 'lucide-react';
 
 export default function LifeCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { grid, ageGrid, gridSize, isPlaying, evalResult } = useRngdleStore();
+  const {
+    grid,
+    ageGrid,
+    gridSize,
+    isPlaying,
+    isInspecting,
+    inspectCellInfo,
+    evalResult,
+  } = useRngdleStore();
 
   // Ghost Trail Grid (32x32 float opacity decay values)
   const trailRef = useRef<number[][]>(
@@ -21,7 +30,7 @@ export default function LifeCanvas() {
   }
 
   const rating = evalResult?.rating || 'Common';
-  const shouldShake = liveCount > 350;
+  const shouldShake = liveCount > 350 && !isInspecting;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -38,9 +47,8 @@ export default function LifeCanvas() {
     for (let r = 0; r < gridSize; r++) {
       for (let c = 0; c < gridSize; c++) {
         if (grid[r][c] === 1) {
-          trails[r][c] = 0; // Active cell overrides trail
+          trails[r][c] = 0;
         } else {
-          // If cell just died or had trail, decay opacity over 3-4 frames
           if (trails[r][c] > 0) {
             trails[r][c] = Math.max(0, trails[r][c] - 0.25);
           }
@@ -54,13 +62,19 @@ export default function LifeCanvas() {
     let dividerColor = 'rgba(56, 189, 248, 0.3)';
 
     if (rating === 'Rare') {
-      bgColor = '#022C22'; // Emerald 950
-      gridColor = '#065F46'; // Emerald 800
+      bgColor = '#022C22';
+      gridColor = '#065F46';
       dividerColor = 'rgba(52, 211, 153, 0.4)';
     } else if (rating === 'Legendary' || rating === 'Mythic') {
-      bgColor = '#16021F'; // Cyber Obsidian
-      gridColor = '#4C0519'; // Rose/Purple 900
-      dividerColor = 'rgba(245, 158, 11, 0.4)'; // Cyber Gold divider
+      bgColor = '#16021F';
+      gridColor = '#4C0519';
+      dividerColor = 'rgba(245, 158, 11, 0.4)';
+    }
+
+    if (isInspecting) {
+      bgColor = '#0B0F17'; // Deep dark scan background
+      gridColor = '#1E293B';
+      dividerColor = 'rgba(250, 204, 21, 0.6)'; // Yellow scan divider
     }
 
     // Clear Canvas
@@ -94,14 +108,16 @@ export default function LifeCanvas() {
     ctx.stroke();
 
     // 1. Render Fading Ghost Trails (Dead Cell Particles)
-    for (let r = 0; r < gridSize; r++) {
-      for (let c = 0; c < gridSize; c++) {
-        const trailAlpha = trails[r][c];
-        if (trailAlpha > 0 && grid[r][c] === 0) {
-          const x = c * cellSize;
-          const y = r * cellSize;
-          ctx.fillStyle = `rgba(239, 68, 68, ${trailAlpha * 0.4})`; // Fading red/rose particle trail
-          ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+    if (!isInspecting) {
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          const trailAlpha = trails[r][c];
+          if (trailAlpha > 0 && grid[r][c] === 0) {
+            const x = c * cellSize;
+            const y = r * cellSize;
+            ctx.fillStyle = `rgba(239, 68, 68, ${trailAlpha * 0.4})`;
+            ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+          }
         }
       }
     }
@@ -117,29 +133,29 @@ export default function LifeCanvas() {
           let fillColor = '#38BDF8';
           let glowColor = 'rgba(56, 189, 248, 0.4)';
 
-          if (rating === 'Mythic' || rating === 'Legendary') {
-            // Cyberpunk Gold / Neon Pink Palette
+          if (isInspecting) {
+            fillColor = '#38BDF8';
+            glowColor = 'rgba(56, 189, 248, 0.6)';
+          } else if (rating === 'Mythic' || rating === 'Legendary') {
             if (age === 1) {
-              fillColor = '#F59E0B'; // Cyber Gold
+              fillColor = '#F59E0B';
               glowColor = 'rgba(245, 158, 11, 0.6)';
             } else if (age >= 2 && age <= 5) {
-              fillColor = '#EC4899'; // Neon Pink
+              fillColor = '#EC4899';
               glowColor = 'rgba(236, 72, 153, 0.6)';
             } else {
-              fillColor = '#A855F7'; // Neon Purple
+              fillColor = '#A855F7';
               glowColor = 'rgba(168, 85, 247, 0.6)';
             }
           } else if (rating === 'Rare') {
-            // Mint / Teal Palette
             if (age === 1) {
-              fillColor = '#34D399'; // Mint
+              fillColor = '#34D399';
               glowColor = 'rgba(52, 211, 153, 0.5)';
             } else {
-              fillColor = '#2DD4BF'; // Teal
+              fillColor = '#2DD4BF';
               glowColor = 'rgba(45, 212, 191, 0.5)';
             }
           } else {
-            // Common Palette
             if (age === 2) {
               fillColor = '#34D399';
               glowColor = 'rgba(52, 211, 153, 0.4)';
@@ -166,16 +182,50 @@ export default function LifeCanvas() {
           );
 
           ctx.shadowBlur = 0;
-
-          // Track position for death trail when cell dies next frame
           trails[r][c] = 0.9;
         }
       }
     }
-  }, [grid, ageGrid, gridSize, rating]);
+
+    // 3. Render Seed Inspector Target Focus Highlights & Mirrored Symmetry Pulse
+    if (isInspecting && inspectCellInfo) {
+      const { row, col, mirroredCol, isAlive } = inspectCellInfo;
+
+      // Target left cell box
+      const leftX = col * cellSize;
+      const leftY = row * cellSize;
+
+      ctx.strokeStyle = '#FACC15'; // Glowing Yellow target
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#FACC15';
+      ctx.shadowBlur = 12;
+      ctx.strokeRect(leftX + 1, leftY + 1, cellSize - 2, cellSize - 2);
+
+      // Pulse fill on target left cell
+      ctx.fillStyle = isAlive ? 'rgba(250, 204, 21, 0.5)' : 'rgba(239, 68, 68, 0.25)';
+      ctx.fillRect(leftX + 2, leftY + 2, cellSize - 4, cellSize - 4);
+
+      // Mirrored right cell box
+      const rightX = mirroredCol * cellSize;
+      const rightY = row * cellSize;
+
+      ctx.strokeStyle = '#EC4899'; // Glowing Pink mirrored pulse
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#EC4899';
+      ctx.shadowBlur = 12;
+      ctx.strokeRect(rightX + 1, rightY + 1, cellSize - 2, cellSize - 2);
+
+      // Pulse fill on mirrored right cell
+      ctx.fillStyle = isAlive ? 'rgba(236, 72, 153, 0.5)' : 'rgba(239, 68, 68, 0.25)';
+      ctx.fillRect(rightX + 2, rightY + 2, cellSize - 4, cellSize - 4);
+
+      // Reset shadow
+      ctx.shadowBlur = 0;
+    }
+  }, [grid, ageGrid, gridSize, rating, isInspecting, inspectCellInfo]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isPlaying) return;
+    if (isPlaying || isInspecting) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -208,7 +258,9 @@ export default function LifeCanvas() {
 
   return (
     <div className={`relative flex flex-col items-center justify-center w-full max-w-xl aspect-square rounded-2xl border p-3 shadow-2xl overflow-hidden group transition-all duration-500 ${
-      rating === 'Mythic' || rating === 'Legendary'
+      isInspecting
+        ? 'bg-slate-950 border-amber-500/60 shadow-[0_0_35px_rgba(250,204,21,0.25)]'
+        : rating === 'Mythic' || rating === 'Legendary'
         ? 'bg-purple-950/60 border-pink-500/50 shadow-[0_0_30px_rgba(236,72,153,0.3)]'
         : rating === 'Rare'
         ? 'bg-emerald-950/60 border-emerald-500/50 shadow-[0_0_30px_rgba(52,211,153,0.2)]'
@@ -217,6 +269,41 @@ export default function LifeCanvas() {
       
       {/* Background glow */}
       <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 rounded-full blur-3xl pointer-events-none opacity-50 group-hover:opacity-75 transition-opacity" />
+
+      {/* Inspection Mode HUD Card Overlay */}
+      {isInspecting && inspectCellInfo && (
+        <div className="absolute top-4 z-30 flex items-center gap-4 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-xl text-slate-200 animate-in fade-in duration-300">
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+            <Search size={16} />
+            <span>Cell ({inspectCellInfo.row}, {inspectCellInfo.col})</span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="text-slate-400">PRNG:</span>
+            <span className="font-bold text-sky-400">{inspectCellInfo.prngVal}</span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="text-slate-400">Threshold:</span>
+            <span className="text-slate-300">&lt; {inspectCellInfo.threshold}</span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          <div className={`px-2.5 py-0.5 rounded text-xs font-extrabold flex items-center gap-1 border ${
+            inspectCellInfo.isAlive
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_10px_rgba(52,211,153,0.3)]'
+              : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+          }`}>
+            <Sparkles size={12} />
+            <span>{inspectCellInfo.isAlive ? 'ALIVE' : 'DEAD'}</span>
+          </div>
+        </div>
+      )}
 
       {/* Screen shake alert badge if live pop > 350 */}
       {shouldShake && (
@@ -236,10 +323,18 @@ export default function LifeCanvas() {
       {/* Grid Legend & Axis tag */}
       <div className="flex items-center justify-between w-full mt-3 px-2 text-[11px] text-slate-400 font-mono relative z-10">
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-sky-400" /> Newborn
-          <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1" /> Young
-          <span className="w-2 h-2 rounded-full bg-purple-500 ml-1" /> Mature
-          <span className="w-2 h-2 rounded-full bg-pink-500 ml-1" /> Elder
+          {isInspecting ? (
+            <span className="text-amber-400 font-extrabold flex items-center gap-1">
+              <Eye size={12} /> Inspecting Seed Construction...
+            </span>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-sky-400" /> Newborn
+              <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1" /> Young
+              <span className="w-2 h-2 rounded-full bg-purple-500 ml-1" /> Mature
+              <span className="w-2 h-2 rounded-full bg-pink-500 ml-1" /> Elder
+            </>
+          )}
         </span>
         <span className="text-slate-400 font-bold">{evalResult?.ruleMode || 'B3/S23'}</span>
       </div>

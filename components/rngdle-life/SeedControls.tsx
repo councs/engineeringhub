@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Dices, Play, Pause, SkipForward, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Infinity as InfinityIcon, ShieldAlert } from 'lucide-react';
+import { Dices, Play, Pause, SkipForward, SkipBack, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Search, X, ShieldAlert, Infinity as InfinityIcon } from 'lucide-react';
 
 export default function SeedControls() {
   const {
@@ -22,6 +22,16 @@ export default function SeedControls() {
     autoPauseOnSettled,
     toggleAutoPause,
     evalResult,
+
+    // Inspector State & Actions
+    isInspecting,
+    inspectStep,
+    inspectAutoPlay,
+    startInspection,
+    exitInspection,
+    setInspectStep,
+    stepInspection,
+    toggleInspectAutoPlay,
   } = useRngdleStore();
 
   const [inputVal, setInputVal] = useState(seed);
@@ -42,7 +52,7 @@ export default function SeedControls() {
 
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
-      {/* Top Bar: Seed Input, Mutator Rule Tag, & Roll Button */}
+      {/* Top Bar: Seed Input, Mutator Rule Tag, & Roll/Inspect Buttons */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         
         {/* Seed Roller Input */}
@@ -71,6 +81,20 @@ export default function SeedControls() {
               >
                 <Dices size={20} /> Roll Seed
               </button>
+
+              {/* Inspect Seed Mode Button */}
+              <button
+                onClick={() => (isInspecting ? exitInspection() : startInspection())}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all border shadow-md ${
+                  isInspecting
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_15px_rgba(250,204,21,0.4)]'
+                    : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/40'
+                }`}
+                title="Inspect step-by-step PRNG seed construction"
+              >
+                {isInspecting ? <X size={18} /> : <Search size={18} />}
+                <span>{isInspecting ? 'Exit Mode' : 'Inspect Seed'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -96,101 +120,198 @@ export default function SeedControls() {
         </div>
       </div>
 
-      {/* Main Simulation Action Controls */}
-      <div className="flex flex-col xl:flex-row items-center justify-between gap-6 border-t border-slate-800/80 pt-5">
-        
-        {/* Play/Pause/Step/Reset Buttons */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => (isPlaying ? pause() : play())}
-            className={`flex items-center justify-center gap-2 px-6 py-2.5 font-bold rounded-xl transition-all shadow-md w-32 ${
-              isSettled && autoPauseOnSettled
-                ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                : 'bg-sky-600 hover:bg-sky-500 text-slate-950 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
-            }`}
-          >
-            {isPlaying ? (
-              <>
-                <Pause size={18} /> Pause
-              </>
-            ) : (
-              <>
-                <Play size={18} /> {isSettled ? 'Resume' : 'Play'}
-              </>
-            )}
-          </button>
+      {/* INSPECTOR TOOLBAR (Renders when isInspecting === true) */}
+      {isInspecting ? (
+        <div className="flex flex-col gap-4 border-t border-amber-500/40 pt-5 bg-amber-950/20 p-4 rounded-xl border animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            {/* Step & Scan Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => stepInspection(-1)}
+                disabled={inspectStep <= 0}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs font-bold text-slate-200 border border-slate-700"
+              >
+                <SkipBack size={14} /> Prev Cell
+              </button>
 
-          <button
-            onClick={step}
-            disabled={isPlaying}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium text-slate-200 transition-colors border border-slate-700"
-            title="Advance 1 Generation"
-          >
-            <SkipForward size={18} /> Step (+1)
-          </button>
+              <button
+                onClick={toggleInspectAutoPlay}
+                className="flex items-center gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-[0_0_12px_rgba(250,204,21,0.3)]"
+              >
+                {inspectAutoPlay ? (
+                  <>
+                    <Pause size={14} /> Pause Scan
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} /> Auto Scan
+                  </>
+                )}
+              </button>
 
-          <button
-            onClick={reset}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-medium text-slate-200 transition-colors border border-slate-700"
-            title="Reset to Initial Seed Grid"
-          >
-            <RotateCcw size={18} /> Reset
-          </button>
-        </div>
+              <button
+                onClick={() => stepInspection(1)}
+                disabled={inspectStep >= 512}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs font-bold text-slate-200 border border-slate-700"
+              >
+                Next Cell <SkipForward size={14} />
+              </button>
+            </div>
 
-        {/* Speed Slider, Audio Toggle, & Auto-Stop Mode Toggle */}
-        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
-          
-          {/* Mute Toggle Button */}
-          <button
-            onClick={toggleMute}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
-              isMuted
-                ? 'bg-slate-950 text-slate-500 border-slate-800'
-                : 'bg-sky-500/20 text-sky-400 border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
-            }`}
-            title={isMuted ? 'Unmute Web Audio Pitch Beeps' : 'Mute Web Audio Pitch Beeps'}
-          >
-            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            <span>{isMuted ? 'Muted' : 'Audio On'}</span>
-          </button>
+            {/* Cell Progress Info & Exit */}
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-mono font-bold text-amber-300">
+                Cell Index: <span className="text-white">{inspectStep}</span> / 512
+              </span>
 
-          {/* Auto-Stop Toggle Button */}
-          <button
-            onClick={toggleAutoPause}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
-              autoPauseOnSettled
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
-                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.2)]'
-            }`}
-            title={autoPauseOnSettled ? 'Auto-Pause when steady state reached' : 'Continuous Mode: keeps animating even after steady state'}
-          >
-            {autoPauseOnSettled ? <ShieldAlert size={16} /> : <InfinityIcon size={16} />}
-            <span>{autoPauseOnSettled ? 'Auto-Stop: ON' : 'Continuous: ON'}</span>
-          </button>
+              <button
+                onClick={exitInspection}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 rounded-lg text-xs font-bold border border-rose-900/50"
+              >
+                <X size={14} /> Exit Inspector
+              </button>
+            </div>
 
-          <div className="flex items-center gap-3 flex-1 xl:w-52">
-            <SlidersHorizontal size={18} className="text-slate-400" />
-            <div className="flex flex-col flex-1 gap-1">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-                <span>Speed</span>
-                <span className="font-mono text-sky-400">{speed}ms</span>
+          </div>
+
+          {/* Inspection Step Progress Slider & Speed Control */}
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            
+            {/* Cell Progress Slider */}
+            <div className="flex flex-col flex-1 gap-1 w-full">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
+                <span>PRNG Cell Scanning Progress</span>
+                <span className="font-mono text-amber-400">{((inspectStep / 512) * 100).toFixed(0)}%</span>
               </div>
               <input
                 type="range"
-                min="10"
-                max="200"
-                step="10"
-                value={speed}
-                onChange={(e) => setSpeed(Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                min="0"
+                max="512"
+                value={inspectStep}
+                onChange={(e) => setInspectStep(Number(e.target.value))}
+                className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-400"
               />
             </div>
+
+            {/* Scan Speed Slider (Right = Faster!) */}
+            <div className="flex items-center gap-3 w-full sm:w-56">
+              <SlidersHorizontal size={16} className="text-amber-400" />
+              <div className="flex flex-col flex-1 gap-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
+                  <span>Scan Speed</span>
+                  <span className="font-mono text-amber-400">{speed > 70 ? 'Fast' : speed > 40 ? 'Med' : 'Slow'}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={speed}
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                />
+              </div>
+            </div>
+
+          </div>
+        </div>
+      ) : (
+        /* NORMAL SIMULATION ACTION CONTROLS */
+        <div className="flex flex-col xl:flex-row items-center justify-between gap-6 border-t border-slate-800/80 pt-5">
+          
+          {/* Play/Pause/Step/Reset Buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => (isPlaying ? pause() : play())}
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 font-bold rounded-xl transition-all shadow-md w-32 ${
+                isSettled && autoPauseOnSettled
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                  : 'bg-sky-600 hover:bg-sky-500 text-slate-950 shadow-[0_0_15px_rgba(56,189,248,0.4)]'
+              }`}
+            >
+              {isPlaying ? (
+                <>
+                  <Pause size={18} /> Pause
+                </>
+              ) : (
+                <>
+                  <Play size={18} /> {isSettled ? 'Resume' : 'Play'}
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={step}
+              disabled={isPlaying}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium text-slate-200 transition-colors border border-slate-700"
+              title="Advance 1 Generation"
+            >
+              <SkipForward size={18} /> Step (+1)
+            </button>
+
+            <button
+              onClick={reset}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl font-medium text-slate-200 transition-colors border border-slate-700"
+              title="Reset to Initial Seed Grid"
+            >
+              <RotateCcw size={18} /> Reset
+            </button>
+          </div>
+
+          {/* Speed Slider, Audio Toggle, & Auto-Stop Mode Toggle */}
+          <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
+            
+            {/* Mute Toggle Button */}
+            <button
+              onClick={toggleMute}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                isMuted
+                  ? 'bg-slate-950 text-slate-500 border-slate-800'
+                  : 'bg-sky-500/20 text-sky-400 border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
+              }`}
+              title={isMuted ? 'Unmute Web Audio Pitch Beeps' : 'Mute Web Audio Pitch Beeps'}
+            >
+              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              <span>{isMuted ? 'Muted' : 'Audio On'}</span>
+            </button>
+
+            {/* Auto-Stop Toggle Button */}
+            <button
+              onClick={toggleAutoPause}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                autoPauseOnSettled
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.2)]'
+              }`}
+              title={autoPauseOnSettled ? 'Auto-Pause when steady state reached' : 'Continuous Mode: keeps animating even after steady state'}
+            >
+              {autoPauseOnSettled ? <ShieldAlert size={16} /> : <InfinityIcon size={16} />}
+              <span>{autoPauseOnSettled ? 'Auto-Stop: ON' : 'Continuous: ON'}</span>
+            </button>
+
+            {/* Speed Slider (Right = Faster!) */}
+            <div className="flex items-center gap-3 flex-1 xl:w-52">
+              <SlidersHorizontal size={18} className="text-slate-400" />
+              <div className="flex flex-col flex-1 gap-1">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
+                  <span>Speed</span>
+                  <span className="font-mono text-sky-400">{speed > 70 ? 'Fast' : speed > 40 ? 'Med' : 'Slow'}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={speed}
+                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                />
+              </div>
+            </div>
+
           </div>
 
         </div>
-
-      </div>
+      )}
     </div>
   );
 }
