@@ -32,7 +32,7 @@ export default function LifeCanvas() {
   }
 
   const theme = evalResult?.theme || 'Terminal Green';
-  const shouldShake = liveCount > 350 && !isInspecting;
+  const isSurging = liveCount > 350 && !isInspecting;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,7 +66,7 @@ export default function LifeCanvas() {
     let dividerColor = 'rgba(34, 197, 94, 0.3)';
 
     if (gameMode === 'artillery') {
-      bgColor = '#0F040A'; // Deep Dark Artillery Radar Theme
+      bgColor = '#0F040A';
       gridColor = '#3F0713';
       dividerColor = 'rgba(244, 63, 94, 0.5)';
     } else if (theme === 'Cyberpunk Neon') {
@@ -153,7 +153,7 @@ export default function LifeCanvas() {
           let glowColor = 'rgba(34, 197, 94, 0.4)';
 
           if (gameMode === 'artillery') {
-            fillColor = '#F43F5E'; // Rose Rocket Red
+            fillColor = '#F43F5E';
             glowColor = 'rgba(244, 63, 94, 0.6)';
           } else if (isInspecting) {
             fillColor = '#38BDF8';
@@ -209,7 +209,6 @@ export default function LifeCanvas() {
       const launchX = spawnC * cellSize + cellSize / 2;
       const launchY = spawnR * cellSize + cellSize / 2;
 
-      // Trajectory dashed line
       ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
@@ -237,7 +236,6 @@ export default function LifeCanvas() {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Crosshair Circle on Spawn Point
       ctx.strokeStyle = '#F43F5E';
       ctx.lineWidth = 2.0;
       ctx.shadowColor = '#F43F5E';
@@ -294,7 +292,6 @@ export default function LifeCanvas() {
     const row = Math.floor(y / cellSize);
 
     if (gameMode === 'artillery') {
-      // In artillery mode, clicking border sets launch position
       if (row <= 2) {
         useRngdleStore.getState().setSpawnEdge('top');
         useRngdleStore.getState().setSpawnPos(col);
@@ -330,8 +327,11 @@ export default function LifeCanvas() {
     }
   };
 
+  // Concise Rule Mode Label for legend so text never cuts off
+  const shortRuleLabel = evalResult?.ruleMode?.split(' ')[0] || 'B3/S23';
+
   return (
-    <div className={`relative flex flex-col items-center justify-center w-full max-w-xl aspect-square rounded-2xl border p-3 shadow-2xl overflow-hidden group transition-all duration-500 ${
+    <div className={`relative flex flex-col items-center justify-center w-full max-w-xl rounded-2xl border p-4 shadow-2xl overflow-hidden group transition-all duration-300 ${
       gameMode === 'artillery'
         ? 'bg-rose-950/80 border-rose-500/60 shadow-[0_0_35px_rgba(244,63,94,0.3)]'
         : isInspecting
@@ -341,34 +341,34 @@ export default function LifeCanvas() {
         : theme === 'Cyberpunk Neon'
         ? 'bg-purple-950/60 border-pink-500/50 shadow-[0_0_30px_rgba(236,72,153,0.3)]'
         : 'bg-slate-950 border-emerald-500/40 shadow-[0_0_20px_rgba(34,197,94,0.2)]'
-    } ${shouldShake ? 'animate-bounce' : ''}`}>
+    } ${isSurging ? 'ring-2 ring-rose-500/80 shadow-[0_0_35px_rgba(244,63,94,0.5)]' : ''}`}>
       
       {/* Background glow */}
       <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 rounded-full blur-3xl pointer-events-none opacity-50 group-hover:opacity-75 transition-opacity" />
 
       {/* Inspection Mode HUD */}
       {isInspecting && inspectCellInfo && (
-        <div className="absolute top-4 z-30 flex items-center gap-4 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-xl text-slate-200 animate-in fade-in duration-300">
+        <div className="absolute top-4 z-30 flex flex-wrap items-center gap-3 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-xl text-slate-200 animate-in fade-in duration-300">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
             <Search size={16} />
             <span>Pod {inspectCellInfo.podIndex} | Cell ({inspectCellInfo.row}, {inspectCellInfo.col})</span>
           </div>
 
-          <div className="h-4 w-px bg-slate-700" />
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
 
           <div className="flex items-center gap-2 font-mono text-xs">
             <span className="text-slate-400">PRNG:</span>
             <span className="font-bold text-sky-400">{inspectCellInfo.prngVal}</span>
           </div>
 
-          <div className="h-4 w-px bg-slate-700" />
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
 
           <div className="flex items-center gap-2 font-mono text-xs">
             <span className="text-slate-400">Threshold:</span>
             <span className="text-slate-300">&lt; {inspectCellInfo.threshold}</span>
           </div>
 
-          <div className="h-4 w-px bg-slate-700" />
+          <div className="h-4 w-px bg-slate-700 hidden sm:block" />
 
           <div className={`px-2.5 py-0.5 rounded text-xs font-extrabold flex items-center gap-1 border ${
             inspectCellInfo.isAlive
@@ -381,24 +381,27 @@ export default function LifeCanvas() {
         </div>
       )}
 
-      {/* Screen shake alert badge */}
-      {shouldShake && (
+      {/* Population Surge Alert Badge */}
+      {isSurging && (
         <div className="absolute top-4 z-20 px-3 py-1 bg-rose-500/90 text-slate-950 font-extrabold text-[10px] uppercase tracking-widest rounded-full shadow-lg animate-pulse">
-          ⚡ Screen-Shake: Extreme Population Surge ({liveCount})!
+          ⚡ Surge: Extreme Population Spike ({liveCount})!
         </div>
       )}
 
-      <canvas
-        ref={canvasRef}
-        width={512}
-        height={512}
-        onClick={handleCanvasClick}
-        className="w-full h-full rounded-xl cursor-pointer relative z-10 touch-none"
-      />
+      {/* Canvas Square Aspect Ratio Container */}
+      <div className="w-full aspect-square relative z-10">
+        <canvas
+          ref={canvasRef}
+          width={512}
+          height={512}
+          onClick={handleCanvasClick}
+          className="w-full h-full rounded-xl cursor-pointer touch-none"
+        />
+      </div>
 
-      {/* Grid Legend & Axis tag */}
-      <div className="flex items-center justify-between w-full mt-3 px-2 text-[11px] text-slate-400 font-mono relative z-10">
-        <span className="flex items-center gap-1.5">
+      {/* Grid Legend & Axis tag - Clean flex-wrap layout so text never truncates */}
+      <div className="flex flex-wrap items-center justify-between gap-2 w-full mt-3 px-1 text-[11px] text-slate-400 font-mono relative z-10">
+        <div className="flex flex-wrap items-center gap-2">
           {gameMode === 'artillery' ? (
             <span className="text-rose-400 font-extrabold flex items-center gap-1">
               <Crosshair size={12} /> Aiming: Click Border to Position Launcher
@@ -408,18 +411,22 @@ export default function LifeCanvas() {
               <Eye size={12} /> Inspecting Seed Construction...
             </span>
           ) : (
-            <>
-              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Newborn
-              <span className="w-2 h-2 rounded-full bg-cyan-400 ml-1" /> Young
-              <span className="w-2 h-2 rounded-full bg-purple-500 ml-1" /> Mature
-              <span className="w-2 h-2 rounded-full bg-amber-400 ml-1" /> Elder
-            </>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> New</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-400" /> Young</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> Mid</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Elder</span>
+            </div>
           )}
-        </span>
-        <span className="text-slate-400 font-bold">
-          {gridSize}x{gridSize} ({evalResult?.podCount || 1} Pods) | {evalResult?.ruleMode || 'B3/S23'}
-        </span>
+        </div>
+
+        <div className="flex items-center gap-2 text-slate-300 font-bold shrink-0">
+          <span>{gridSize}x{gridSize} ({evalResult?.podCount || 1} {evalResult?.podCount === 1 ? 'Pod' : 'Pods'})</span>
+          <span className="text-slate-500">|</span>
+          <span className="text-amber-400 font-extrabold" title={evalResult?.ruleMode}>{shortRuleLabel}</span>
+        </div>
       </div>
+
     </div>
   );
 }
