@@ -57,7 +57,7 @@ export interface RngdleState {
   settledInfo: SettledInfo | null;
   speed: number;
   isMuted: boolean;
-  autoPauseOnSettled: boolean; // Controls whether simulation auto-stops or keeps running on steady state
+  autoPauseOnSettled: boolean; // Controls whether active oscillator loops auto-stop or keep animating
   
   // Analytics & Evaluation
   evalResult: FastEvalResult | null;
@@ -378,48 +378,68 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       }
     }
 
-    const nextGen = state.generation + 1;
-    const nextPopHistory = [...state.popHistory, liveCount];
-    const nextPeak = Math.max(state.peakPopulation, liveCount);
-
-    soundEngine.playTickBeep(liveCount, state.isMuted);
-
     const currentGridKey = grid.map(row => row.join('')).join('');
     const nextGridKey = nextGrid.map(row => row.join('')).join('');
 
     let isSettled = false;
     let settledInfo: SettledInfo | null = null;
+    let isHardStaticStop = false;
 
+    // 1. Extinction check (0 live cells)
     if (liveCount === 0) {
       isSettled = true;
+      isHardStaticStop = true;
       settledInfo = {
         type: 'extinction',
-        reason: 'Extinction: All cells have died out.',
-        generation: nextGen,
+        reason: 'Extinction: All cells have died out (0 Live Cells).',
+        generation: state.generation + 1,
       };
-    } else if (currentGridKey === nextGridKey) {
+    }
+    // 2. Hard Static Equilibrium check (0 grid changes / Period 1)
+    else if (currentGridKey === nextGridKey) {
       isSettled = true;
+      isHardStaticStop = true;
       settledInfo = {
         type: 'static',
-        reason: 'Steady State Equilibrium: Grid has settled into a static configuration (Period-1 Still Life).',
+        reason: 'Hard Static Stop: No grid changes detected (Period-1 Still Life).',
         period: 1,
-        generation: nextGen,
+        generation: state.generation,
       };
-    } else if (liveSeenHashes.has(nextGridKey)) {
+    }
+    // 3. Oscillator Loop repetition check (Period > 1 - Blinking/pulsing animation)
+    else if (liveSeenHashes.has(nextGridKey)) {
       const prevGen = liveSeenHashes.get(nextGridKey)!;
-      const period = nextGen - prevGen;
+      const period = (state.generation + 1) - prevGen;
       isSettled = true;
       settledInfo = {
         type: 'loop',
         reason: `Oscillator Loop Detected: Grid repeats state every ${period} ticks (Period-${period}).`,
         period,
-        generation: nextGen,
+        generation: state.generation + 1,
       };
     }
 
+    // HARD STATIC STOP: If 0 grid changes occur or extinction happens, stop incrementing generation tick count immediately!
+    if (isHardStaticStop) {
+      if (timerId) clearTimeout(timerId);
+      set({
+        isPlaying: false,
+        isSettled: true,
+        settledInfo,
+      });
+      return;
+    }
+
+    const nextGen = state.generation + 1;
+    const nextPopHistory = [...state.popHistory, liveCount];
+    const nextPeak = Math.max(state.peakPopulation, liveCount);
+
+    soundEngine.playTickBeep(liveCount, state.isMuted);
     liveSeenHashes.set(nextGridKey, nextGen);
 
-    if (isSettled) {
+    // Oscillator Loop check: auto-pause ONLY if autoPauseOnSettled is enabled, else keep animating!
+    if (isSettled && settledInfo?.type === 'loop') {
+      const shouldPause = state.autoPauseOnSettled;
       set({
         grid: nextGrid,
         ageGrid: nextAgeGrid,
@@ -428,25 +448,24 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
         peakPopulation: nextPeak,
         isSettled: true,
         settledInfo,
-        // Only pause playback if autoPauseOnSettled is enabled!
-        isPlaying: state.autoPauseOnSettled ? false : state.isPlaying,
+        isPlaying: shouldPause ? false : state.isPlaying,
       });
 
-      if (state.autoPauseOnSettled) {
+      if (shouldPause) {
         if (timerId) clearTimeout(timerId);
         return;
       }
+    } else {
+      set({
+        grid: nextGrid,
+        ageGrid: nextAgeGrid,
+        generation: nextGen,
+        popHistory: nextPopHistory,
+        peakPopulation: nextPeak,
+        isSettled,
+        settledInfo: isSettled ? settledInfo : state.settledInfo,
+      });
     }
-
-    set({
-      grid: nextGrid,
-      ageGrid: nextAgeGrid,
-      generation: nextGen,
-      popHistory: nextPopHistory,
-      peakPopulation: nextPeak,
-      isSettled,
-      settledInfo: isSettled ? settledInfo : state.settledInfo,
-    });
 
     if (state.isPlaying) {
       timerId = setTimeout(runTick, state.speed);
@@ -464,7 +483,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     settledInfo: null,
     speed: 50, // 50ms tick
     isMuted: false,
-    autoPauseOnSettled: false, // Default to continuous live animation!
+    autoPauseOnSettled: false,
     evalResult: initialEval,
     peakPopulation: initialEval.peakPopulation,
     popHistory: [initialEval.peakPopulation],
@@ -504,7 +523,37 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     play: () => {
       if (get().isPlaying) return;
-      if (get().isSettled && get().autoPauseOnSettled) {
+
+      // If grid is in a hard static stop (0 changes), do not restart tick counter unless grid is modified or reset
+      const state = get();
+      if (state.isSettled && state.settledInfo?.type === 'static') {
+        const currentKey = state.grid.map(row => row.join('')).join('');
+        // Calculate 1 tick
+        const ruleMode = state.evalResult?.ruleMode || 'B3/S23 (Conway)';
+        let changes = 0;
+        for (let r = 0; r < GRID_SIZE; r++) {
+          for (let c = 0; c < GRID_SIZE; c++) {
+            let n = 0;
+            for (let dr = -1; dr <= 1; dr++) {
+              for (let dc = -1; dc <= 1; dc++) {
+                if (dr === 0 && dc === 0) continue;
+                const nr = (r + dr + GRID_SIZE) % GRID_SIZE;
+                const nc = (c + dc + GRID_SIZE) % GRID_SIZE;
+                if (state.grid[nr][nc] === 1) n++;
+              }
+            }
+            const isAlive = state.grid[r][c] === 1;
+            const willBeAlive = evaluateCellNextState(isAlive, n, ruleMode);
+            if (isAlive !== willBeAlive) changes++;
+          }
+        }
+
+        if (changes === 0) {
+          return; // Hard static stop: 0 changes, refuse to increment ticks pointlessly!
+        }
+      }
+
+      if (get().isSettled) {
         set({ isSettled: false, settledInfo: null });
       }
       set({ isPlaying: true });
