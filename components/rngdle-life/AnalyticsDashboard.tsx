@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Layers, ChevronDown, ChevronUp, Zap, Trophy, Grid, Sparkle } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Layers, ChevronDown, ChevronUp, Zap, Trophy, Grid, Info, HelpCircle } from 'lucide-react';
 
 function ScoreTicker({ targetScore, rating }: { targetScore: number; rating: string }) {
   const [displayScore, setDisplayScore] = useState(0);
@@ -100,6 +100,18 @@ export default function AnalyticsDashboard() {
     appliedTraits: [],
   };
 
+  const ruleMode = evalResult?.ruleMode || 'B3/S23 (Conway)';
+  const isRuleMutated = !ruleMode.includes('Conway');
+
+  let ruleExplanation = 'Standard Conway rules (B3/S23): Cells are born with 3 neighbors, survive with 2 or 3.';
+  if (ruleMode.includes('HighLife')) {
+    ruleExplanation = '💥 HighLife Mutator (B36/S23): Triggered by meme digits (420, 69, 67, 777, 000). Cells are born with 3 OR 6 neighbors, allowing diagonal Replicators to clone infinitely!';
+  } else if (ruleMode.includes('Pattern Shift')) {
+    ruleExplanation = '⚡ Pattern Shift Mutator (B357/S23): Triggered by pattern sequences or triplets. Cells are born with 3, 5, or 7 neighbors, generating hyper-dense lattice waves!';
+  } else if (ruleMode.includes('Replicator Overdrive')) {
+    ruleExplanation = '🌌 Replicator Overdrive (B368/S23): Triggered by quad zeros (0000). Cells are born with 3, 6, or 8 neighbors in a 64x64 4-pod battle arena!';
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
       
@@ -141,7 +153,7 @@ export default function AnalyticsDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 text-sky-400 font-bold text-sm mr-1">
             <Zap size={18} />
-            <span>Seed Highlights:</span>
+            <span>Matched Seed Bonuses:</span>
           </div>
 
           {bd.appliedTraits && bd.appliedTraits.length > 0 ? (
@@ -217,6 +229,42 @@ export default function AnalyticsDashboard() {
               <span className="text-slate-400">Extinct / Static at Tick {evalResult?.lifespan}</span>
             )}
           </span>
+        </div>
+      </div>
+
+      {/* CLEAR RULE & ARENA EXPLANATION BOX */}
+      <div className={`flex flex-col p-4 rounded-xl border transition-all text-xs gap-2 ${
+        isRuleMutated
+          ? 'bg-gradient-to-r from-amber-950/40 to-purple-950/40 border-amber-500/40 shadow-inner'
+          : 'bg-slate-950/60 border-slate-800'
+      }`}>
+        <div className="flex items-center justify-between">
+          <span className="font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <Zap size={14} /> Active Mechanics & Rule Breakdown
+          </span>
+          <span className="font-mono text-[10px] text-slate-400 font-bold">
+            {isRuleMutated ? '✨ Mutated Rules Active' : '⚙️ Standard Rules Active'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
+          <div className="flex flex-col gap-1 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Info size={12} className="text-sky-400" /> Game Rule Set ({ruleMode})
+            </span>
+            <p className="text-slate-300 leading-relaxed font-sans">
+              {ruleExplanation}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Grid size={12} className="text-purple-400" /> Arena Expansion & Spawners
+            </span>
+            <p className="text-slate-300 leading-relaxed font-sans">
+              Grid expanded to <strong className="text-sky-300">{evalResult?.gridSize}x{evalResult?.gridSize}</strong> with <strong className="text-amber-300">{evalResult?.podCount} {evalResult?.podCount === 1 ? 'Pod' : 'Pods'}</strong>. Pattern & meme seeds expand grid size to grant a higher <strong>{bd.multiplier}x Rarity Multiplier</strong>!
+            </p>
+          </div>
         </div>
       </div>
 
