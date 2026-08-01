@@ -5,6 +5,10 @@ export type SeedRating = 'Common' | 'Rare' | 'Legendary' | 'Mythic';
 
 export type RuleMode = 'B3/S23 (Conway)' | 'B36/S23 (HighLife)' | 'B357/S23 (Pattern Shift)' | 'B368/S23 (Replicator Overdrive)';
 
+export type ClassArchetype = 'Archmage Cloning Engine' | 'Supernova' | 'Starship Fleet' | 'The Fortress';
+
+export type ThemePalette = 'Terminal Green' | 'Cyberpunk Neon' | 'Golden Solar';
+
 export interface TraitBadge {
   id: string;
   name: string;
@@ -24,6 +28,12 @@ export interface ScoreBreakdown {
   multiplier: number;
 }
 
+export interface ArchetypeInfo {
+  title: ClassArchetype;
+  emoji: string;
+  description: string;
+}
+
 export interface FastEvalResult {
   seed: string;
   lifespan: number;
@@ -34,6 +44,10 @@ export interface FastEvalResult {
   rating: SeedRating;
   ruleMode: RuleMode;
   fillDensity: number;
+  gridSize: number; // 24, 32, 48, or 64
+  podCount: number; // 1, 2, or 4 pods
+  theme: ThemePalette;
+  archetype: ArchetypeInfo;
   traits: TraitBadge[];
   breakdown: ScoreBreakdown;
 }
@@ -49,8 +63,9 @@ export interface InspectCellInfo {
   row: number;
   col: number;
   mirroredCol: number;
-  index: number; // 0 to 511
-  totalCells: number; // 512
+  index: number;
+  totalCells: number;
+  podIndex: number; // 1, 2, 3, 4
   prngVal: number;
   threshold: number;
   isAlive: boolean;
@@ -59,20 +74,21 @@ export interface InspectCellInfo {
 export interface RngdleState {
   // Core state
   seed: string;
-  gridSize: number;
+  gridSize: number; // 24, 32, 48, or 64
   grid: number[][];
   ageGrid: number[][];
   generation: number;
   isPlaying: boolean;
   isSettled: boolean;
   settledInfo: SettledInfo | null;
-  speed: number; // 1 (Slowest / 200ms) to 100 (Fastest / 10ms) -- Right is Faster!
+  speed: number; // 1 to 100
   isMuted: boolean;
   autoPauseOnSettled: boolean;
   
   // Seed Inspector State
   isInspecting: boolean;
-  inspectStep: number; // 0 to 512
+  inspectStep: number;
+  inspectTotalSteps: number;
   inspectAutoPlay: boolean;
   inspectCellInfo: InspectCellInfo | null;
 
@@ -102,9 +118,6 @@ export interface RngdleState {
   generateShareText: () => string;
 }
 
-const GRID_SIZE = 32;
-const INSPECT_TOTAL_CELLS = 512; // 32 rows * 16 left cols
-
 // Mulberry32 deterministic PRNG
 function mulberry32(a: number) {
   return function() {
@@ -115,14 +128,20 @@ function mulberry32(a: number) {
   };
 }
 
-// Convert 1-100 speed scale to millisecond delay (Right = Faster!)
 function speedToDelayMs(speedVal: number): number {
   const clamped = Math.max(1, Math.min(100, speedVal));
   return Math.max(10, Math.round(210 - clamped * 2));
 }
 
-// Expanded Rule Mutators & Mathematical Rarity Evaluator
-export function evaluateSeedTraits(seedStr: string): { traits: TraitBadge[]; ruleMode: RuleMode; fillDensity: number } {
+// Evaluate Seed Traits, Rule Modes, Grid Dimensions & Spawner Pod Layouts
+export function evaluateSeedTraits(seedStr: string): { 
+  traits: TraitBadge[]; 
+  ruleMode: RuleMode; 
+  fillDensity: number;
+  gridSize: number;
+  podCount: number;
+  theme: ThemePalette;
+} {
   const traits: TraitBadge[] = [];
   let ruleMode: RuleMode = 'B3/S23 (Conway)';
   let maxTier: 1 | 2 | 3 = 1;
@@ -210,82 +229,178 @@ export function evaluateSeedTraits(seedStr: string): { traits: TraitBadge[]; rul
     });
   }
 
+  // Dynamic Grid Dimensions, Multi-Pod Spawners, & Visual Themes
+  let gridSize = 32;
+  let podCount = 1;
   let fillDensity = 0.22;
-  if (maxTier === 2) fillDensity = 0.32;
-  if (maxTier === 3) fillDensity = 0.42;
+  let theme: ThemePalette = 'Terminal Green';
 
-  return { traits, ruleMode, fillDensity };
-}
-
-// Generate 2-way horizontal symmetrical grid from seed
-function generateSymmetricalGrid(seedStr: string): { grid: number[][]; ageGrid: number[][]; fillDensity: number; ruleMode: RuleMode } {
-  const seedNum = parseInt(seedStr, 10) || 1234567;
-  const prng = mulberry32(seedNum);
-
-  const { traits, ruleMode, fillDensity } = evaluateSeedTraits(seedStr);
-
-  const grid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-  const ageGrid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-
-  const halfWidth = GRID_SIZE / 2;
-
-  for (let r = 0; r < GRID_SIZE; r++) {
-    for (let c = 0; c < halfWidth; c++) {
-      const rand = prng();
-      const alive = rand < fillDensity ? 1 : 0;
-      
-      grid[r][c] = alive;
-      ageGrid[r][c] = alive ? 1 : 0;
-
-      const mirroredCol = GRID_SIZE - 1 - c;
-      grid[r][mirroredCol] = alive;
-      ageGrid[r][mirroredCol] = alive ? 1 : 0;
-    }
+  if (maxTier === 3) {
+    gridSize = 64; // Mythic Overdrive: 64x64 Grid
+    podCount = 4;  // 4 Corner Battle Pods
+    fillDensity = 0.42;
+    theme = 'Golden Solar';
+  } else if (isMemeDigit || isBinaryPattern) {
+    gridSize = 48; // Meme / Pattern: 48x48 Grid
+    podCount = 2;  // 2 Opposing Corner Pods
+    fillDensity = 0.32;
+    theme = 'Cyberpunk Neon';
+  } else if (traits.length > 0) {
+    gridSize = 32; // Tier 1: 32x32 Grid
+    podCount = 1;
+    fillDensity = 0.26;
+    theme = 'Terminal Green';
+  } else {
+    gridSize = 24; // Common Seeds: 24x24 Grid
+    podCount = 1;
+    fillDensity = 0.20;
+    theme = 'Terminal Green';
   }
 
-  return { grid, ageGrid, fillDensity, ruleMode };
+  return { traits, ruleMode, fillDensity, gridSize, podCount, theme };
 }
 
-// Compute inspection grid & cell info up to stepIndex (0 to 512)
-function computeInspectionState(seedStr: string, stepIndex: number): { grid: number[][]; ageGrid: number[][]; cellInfo: InspectCellInfo | null } {
+// Generate Multi-Pod Symmetrical Layout
+function generateSymmetricalGrid(seedStr: string): { 
+  grid: number[][]; 
+  ageGrid: number[][]; 
+  fillDensity: number; 
+  ruleMode: RuleMode;
+  gridSize: number;
+  podCount: number;
+  theme: ThemePalette;
+} {
   const seedNum = parseInt(seedStr, 10) || 1234567;
   const prng = mulberry32(seedNum);
-  const { fillDensity } = evaluateSeedTraits(seedStr);
 
-  const grid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-  const ageGrid: number[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+  const { traits, ruleMode, fillDensity, gridSize, podCount, theme } = evaluateSeedTraits(seedStr);
 
+  const grid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+  const ageGrid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+  // Determine pod bounding boxes
+  const podLocations: { r0: number; c0: number; pSize: number }[] = [];
+  const pSize = 16;
+
+  if (podCount === 1) {
+    // 1 Central Pod
+    const r0 = Math.floor((gridSize - pSize) / 2);
+    const c0 = Math.floor((gridSize - pSize) / 2);
+    podLocations.push({ r0, c0, pSize });
+  } else if (podCount === 2) {
+    // 2 Opposing Corner Pods (Top-Left and Bottom-Right)
+    podLocations.push({ r0: 4, c0: 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
+  } else if (podCount === 4) {
+    // 4 Corner Pods (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
+    podLocations.push({ r0: 4, c0: 4, pSize });
+    podLocations.push({ r0: 4, c0: gridSize - pSize - 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
+  }
+
+  // Populate Pods with 2-way horizontal symmetry per pod
+  podLocations.forEach((pod) => {
+    const halfP = pod.pSize / 2;
+    for (let r = 0; r < pod.pSize; r++) {
+      for (let c = 0; c < halfP; c++) {
+        const rand = prng();
+        const alive = rand < fillDensity ? 1 : 0;
+
+        const realR = pod.r0 + r;
+        const realC = pod.c0 + c;
+        const mirroredC = pod.c0 + (pod.pSize - 1 - c);
+
+        if (realR >= 0 && realR < gridSize && realC >= 0 && realC < gridSize) {
+          grid[realR][realC] = alive;
+          ageGrid[realR][realC] = alive ? 1 : 0;
+          grid[realR][mirroredC] = alive;
+          ageGrid[realR][mirroredC] = alive ? 1 : 0;
+        }
+      }
+    }
+  });
+
+  return { grid, ageGrid, fillDensity, ruleMode, gridSize, podCount, theme };
+}
+
+// Compute inspection grid & cell info up to stepIndex
+function computeInspectionState(seedStr: string, stepIndex: number): { 
+  grid: number[][]; 
+  ageGrid: number[][]; 
+  cellInfo: InspectCellInfo | null;
+  totalSteps: number;
+} {
+  const seedNum = parseInt(seedStr, 10) || 1234567;
+  const prng = mulberry32(seedNum);
+  const { fillDensity, gridSize, podCount } = evaluateSeedTraits(seedStr);
+
+  const grid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+  const ageGrid: number[][] = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+
+  const podLocations: { r0: number; c0: number; pSize: number }[] = [];
+  const pSize = 16;
+
+  if (podCount === 1) {
+    podLocations.push({ r0: Math.floor((gridSize - pSize) / 2), c0: Math.floor((gridSize - pSize) / 2), pSize });
+  } else if (podCount === 2) {
+    podLocations.push({ r0: 4, c0: 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
+  } else if (podCount === 4) {
+    podLocations.push({ r0: 4, c0: 4, pSize });
+    podLocations.push({ r0: 4, c0: gridSize - pSize - 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: 4, pSize });
+    podLocations.push({ r0: gridSize - pSize - 4, c0: gridSize - pSize - 4, pSize });
+  }
+
+  const cellsPerPod = pSize * (pSize / 2); // 16 * 8 = 128 cells per pod
+  const totalSteps = podLocations.length * cellsPerPod;
+
+  const clampedStep = Math.max(0, Math.min(totalSteps, stepIndex));
   let cellInfo: InspectCellInfo | null = null;
-  const clampedStep = Math.max(0, Math.min(INSPECT_TOTAL_CELLS, stepIndex));
 
-  for (let i = 0; i < clampedStep; i++) {
-    const r = Math.floor(i / 16);
-    const c = i % 16;
-    const randVal = prng();
-    const isAlive = randVal < fillDensity;
+  let stepCounter = 0;
+  for (let pIdx = 0; pIdx < podLocations.length; pIdx++) {
+    const pod = podLocations[pIdx];
+    const halfP = pod.pSize / 2;
 
-    grid[r][c] = isAlive ? 1 : 0;
-    ageGrid[r][c] = isAlive ? 1 : 0;
+    for (let r = 0; r < pod.pSize; r++) {
+      for (let c = 0; c < halfP; c++) {
+        stepCounter++;
+        const randVal = prng();
+        const isAlive = randVal < fillDensity;
 
-    const mirroredCol = GRID_SIZE - 1 - c;
-    grid[r][mirroredCol] = isAlive ? 1 : 0;
-    ageGrid[r][mirroredCol] = isAlive ? 1 : 0;
+        if (stepCounter <= clampedStep) {
+          const realR = pod.r0 + r;
+          const realC = pod.c0 + c;
+          const mirroredC = pod.c0 + (pod.pSize - 1 - c);
 
-    if (i === clampedStep - 1) {
-      cellInfo = {
-        row: r,
-        col: c,
-        mirroredCol,
-        index: i,
-        totalCells: INSPECT_TOTAL_CELLS,
-        prngVal: Number(randVal.toFixed(4)),
-        threshold: Number(fillDensity.toFixed(4)),
-        isAlive,
-      };
+          if (realR >= 0 && realR < gridSize && realC >= 0 && realC < gridSize) {
+            grid[realR][realC] = isAlive ? 1 : 0;
+            ageGrid[realR][realC] = isAlive ? 1 : 0;
+            grid[realR][mirroredC] = isAlive ? 1 : 0;
+            ageGrid[realR][mirroredC] = isAlive ? 1 : 0;
+          }
+
+          if (stepCounter === clampedStep) {
+            cellInfo = {
+              row: realR,
+              col: realC,
+              mirroredCol: mirroredC,
+              index: stepCounter,
+              totalCells: totalSteps,
+              podIndex: pIdx + 1,
+              prngVal: Number(randVal.toFixed(4)),
+              threshold: Number(fillDensity.toFixed(4)),
+              isAlive,
+            };
+          }
+        }
+      }
     }
   }
 
-  return { grid, ageGrid, cellInfo };
+  return { grid, ageGrid, cellInfo, totalSteps };
 }
 
 function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: RuleMode): boolean {
@@ -305,8 +420,43 @@ function evaluateCellNextState(isAlive: boolean, neighbors: number, ruleMode: Ru
   return neighbors === 3;
 }
 
+// Evaluate Class Archetype Badge Title
+export function evaluateClassArchetype(
+  ruleMode: RuleMode, 
+  peakPop: number, 
+  chaosSD: number, 
+  isStatic: boolean
+): ArchetypeInfo {
+  if (ruleMode.includes('HighLife') || ruleMode.includes('Replicator')) {
+    return {
+      title: 'Archmage Cloning Engine',
+      emoji: '🧙‍♂️',
+      description: 'HighLife rules active spawning exponential diagonal Replicators!',
+    };
+  }
+  if (peakPop >= 300) {
+    return {
+      title: 'Supernova',
+      emoji: '⚡',
+      description: 'Massive population surge exceeding 300 live cells!',
+    };
+  }
+  if (chaosSD >= 70) {
+    return {
+      title: 'Starship Fleet',
+      emoji: '🚀',
+      description: 'High population motion and kinetic glider dynamics!',
+    };
+  }
+  return {
+    title: 'The Fortress',
+    emoji: '🛡️',
+    description: 'Low-variance defensive structure or static equilibrium.',
+  };
+}
+
 export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
-  const { grid: initialGrid, fillDensity, ruleMode } = generateSymmetricalGrid(seedStr);
+  const { grid: initialGrid, fillDensity, ruleMode, gridSize, podCount, theme } = generateSymmetricalGrid(seedStr);
   let currentGrid = initialGrid.map(row => [...row]);
   
   const { traits } = evaluateSeedTraits(seedStr);
@@ -321,8 +471,8 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     let pop = 0;
     const gridKey = currentGrid.map(row => row.join('')).join('');
 
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c < gridSize; c++) {
         if (currentGrid[r][c] === 1) pop++;
       }
     }
@@ -343,15 +493,15 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     }
     seenGridHashes.set(gridKey, gen);
 
-    const nextGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
+    const nextGrid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c < gridSize; c++) {
         let n = 0;
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             if (dr === 0 && dc === 0) continue;
-            const nr = (r + dr + GRID_SIZE) % GRID_SIZE;
-            const nc = (c + dc + GRID_SIZE) % GRID_SIZE;
+            const nr = (r + dr + gridSize) % gridSize;
+            const nc = (c + dc + gridSize) % gridSize;
             if (currentGrid[nr][nc] === 1) n++;
           }
         }
@@ -386,6 +536,8 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
   else if (score >= 1200) rating = 'Legendary';
   else if (score >= 500) rating = 'Rare';
 
+  const archetype = evaluateClassArchetype(ruleMode, peakPop, chaosVariance, period === 1);
+
   return {
     seed: seedStr,
     lifespan,
@@ -396,6 +548,10 @@ export function runFastForwardEvaluation(seedStr: string): FastEvalResult {
     rating,
     ruleMode,
     fillDensity,
+    gridSize,
+    podCount,
+    theme,
+    archetype,
     traits,
     breakdown: {
       lifespanPoints,
@@ -421,23 +577,24 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const state = get();
     if (!state.isPlaying) return;
 
+    const gridSize = state.gridSize;
     const grid = state.grid;
     const ageGrid = state.ageGrid;
     const ruleMode = state.evalResult?.ruleMode || 'B3/S23 (Conway)';
 
-    const nextGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
-    const nextAgeGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
+    const nextGrid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+    const nextAgeGrid = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
 
     let liveCount = 0;
 
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c < gridSize; c++) {
         let n = 0;
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             if (dr === 0 && dc === 0) continue;
-            const nr = (r + dr + GRID_SIZE) % GRID_SIZE;
-            const nc = (c + dc + GRID_SIZE) % GRID_SIZE;
+            const nr = (r + dr + gridSize) % gridSize;
+            const nc = (c + dc + gridSize) % gridSize;
             if (grid[nr][nc] === 1) n++;
           }
         }
@@ -545,7 +702,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const state = get();
     if (!state.isInspecting || !state.inspectAutoPlay) return;
 
-    if (state.inspectStep >= INSPECT_TOTAL_CELLS) {
+    if (state.inspectStep >= state.inspectTotalSteps) {
       set({ inspectAutoPlay: false });
       if (inspectTimerId) clearTimeout(inspectTimerId);
       return;
@@ -554,30 +711,31 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
     const nextStep = state.inspectStep + 1;
     state.setInspectStep(nextStep);
 
-    if (get().inspectAutoPlay && nextStep < INSPECT_TOTAL_CELLS) {
+    if (get().inspectAutoPlay && nextStep < get().inspectTotalSteps) {
       const delay = speedToDelayMs(get().speed);
       inspectTimerId = setTimeout(runInspectAutoTick, delay);
-    } else if (nextStep >= INSPECT_TOTAL_CELLS) {
+    } else if (nextStep >= get().inspectTotalSteps) {
       set({ inspectAutoPlay: false });
     }
   };
 
   return {
     seed: initialSeed,
-    gridSize: GRID_SIZE,
+    gridSize: initialGrids.gridSize,
     grid: initialGrids.grid,
     ageGrid: initialGrids.ageGrid,
     generation: 0,
     isPlaying: false,
     isSettled: false,
     settledInfo: null,
-    speed: 80, // Default 80 = Fast (Right is Faster!)
+    speed: 80, // Default 80 = Fast
     isMuted: false,
     autoPauseOnSettled: false,
     
     // Inspection State
     isInspecting: false,
     inspectStep: 0,
+    inspectTotalSteps: 128,
     inspectAutoPlay: false,
     inspectCellInfo: null,
 
@@ -587,7 +745,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     setSeed: (newSeedStr) => {
       const cleanSeed = newSeedStr.replace(/\D/g, '').slice(0, 7).padStart(7, '0');
-      const { grid, ageGrid } = generateSymmetricalGrid(cleanSeed);
+      const { grid, ageGrid, gridSize } = generateSymmetricalGrid(cleanSeed);
       const evalRes = runFastForwardEvaluation(cleanSeed);
 
       if (timerId) clearTimeout(timerId);
@@ -602,6 +760,7 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
       set({
         seed: cleanSeed,
+        gridSize,
         grid,
         ageGrid,
         generation: 0,
@@ -631,17 +790,18 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       if (get().isPlaying) return;
 
       const state = get();
+      const gridSize = state.gridSize;
       if (state.isSettled && state.settledInfo?.type === 'static') {
         const ruleMode = state.evalResult?.ruleMode || 'B3/S23 (Conway)';
         let changes = 0;
-        for (let r = 0; r < GRID_SIZE; r++) {
-          for (let c = 0; c < GRID_SIZE; c++) {
+        for (let r = 0; r < gridSize; r++) {
+          for (let c = 0; c < gridSize; c++) {
             let n = 0;
             for (let dr = -1; dr <= 1; dr++) {
               for (let dc = -1; dc <= 1; dc++) {
                 if (dr === 0 && dc === 0) continue;
-                const nr = (r + dr + GRID_SIZE) % GRID_SIZE;
-                const nc = (c + dc + GRID_SIZE) % GRID_SIZE;
+                const nr = (r + dr + gridSize) % gridSize;
+                const nc = (c + dc + gridSize) % gridSize;
                 if (state.grid[nr][nc] === 1) n++;
               }
             }
@@ -680,13 +840,14 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       const state = get();
       if (timerId) clearTimeout(timerId);
       if (inspectTimerId) clearTimeout(inspectTimerId);
-      const { grid, ageGrid } = generateSymmetricalGrid(state.seed);
+      const { grid, ageGrid, gridSize } = generateSymmetricalGrid(state.seed);
 
       liveSeenHashes.clear();
       const initialKey = grid.map(row => row.join('')).join('');
       liveSeenHashes.set(initialKey, 0);
 
       set({
+        gridSize,
         grid,
         ageGrid,
         generation: 0,
@@ -720,12 +881,13 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       if (timerId) clearTimeout(timerId);
       if (inspectTimerId) clearTimeout(inspectTimerId);
 
-      const { grid, ageGrid, cellInfo } = computeInspectionState(state.seed, 1);
+      const { grid, ageGrid, cellInfo, totalSteps } = computeInspectionState(state.seed, 1);
 
       set({
         isPlaying: false,
         isInspecting: true,
         inspectStep: 1,
+        inspectTotalSteps: totalSteps,
         inspectAutoPlay: false,
         grid,
         ageGrid,
@@ -733,20 +895,21 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
       });
 
       if (cellInfo) {
-        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, INSPECT_TOTAL_CELLS, state.isMuted);
+        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, totalSteps, state.isMuted);
       }
     },
 
     exitInspection: () => {
       const state = get();
       if (inspectTimerId) clearTimeout(inspectTimerId);
-      const { grid, ageGrid } = generateSymmetricalGrid(state.seed);
+      const { grid, ageGrid, gridSize } = generateSymmetricalGrid(state.seed);
 
       set({
         isInspecting: false,
         inspectStep: 0,
         inspectAutoPlay: false,
         inspectCellInfo: null,
+        gridSize,
         grid,
         ageGrid,
       });
@@ -754,15 +917,16 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
     setInspectStep: (stepIndex) => {
       const state = get();
-      const clampedStep = Math.max(0, Math.min(INSPECT_TOTAL_CELLS, stepIndex));
-      const { grid, ageGrid, cellInfo } = computeInspectionState(state.seed, clampedStep);
+      const { grid, ageGrid, cellInfo, totalSteps } = computeInspectionState(state.seed, stepIndex);
+      const clampedStep = Math.max(0, Math.min(totalSteps, stepIndex));
 
       if (cellInfo) {
-        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, INSPECT_TOTAL_CELLS, state.isMuted);
+        soundEngine.playInspectCellBeep(cellInfo.isAlive, cellInfo.index, totalSteps, state.isMuted);
       }
 
       set({
         inspectStep: clampedStep,
+        inspectTotalSteps: totalSteps,
         grid,
         ageGrid,
         inspectCellInfo: cellInfo,
@@ -799,8 +963,9 @@ export const useRngdleStore = create<RngdleState>((set, get) => {
 
       return [
         `🧬 RNGdle Life #${res.seed}`,
+        `Archetype: ${res.archetype.emoji} ${res.archetype.title}`,
         `Rating: ${res.rating} ${ratingEmoji} (Power Score: ${res.score})`,
-        `Rule Mode: ${res.ruleMode} | Density: ${(res.fillDensity * 100).toFixed(0)}%`,
+        `Grid: ${res.gridSize}x${res.gridSize} (${res.podCount} Pods) | Rule: ${res.ruleMode}`,
         `Traits: ${traitsStr}`,
         `Run Time to Loop: ${res.lifespan} Ticks ⏱️ | Peak Pop: ${res.peakPopulation} 🧬`,
         res.period > 0 ? `Loop Period: ${res.period} 🌀` : `Extinction/Static Gen: ${res.lifespan}`,

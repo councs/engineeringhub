@@ -16,12 +16,8 @@ export default function LifeCanvas() {
     evalResult,
   } = useRngdleStore();
 
-  // Ghost Trail Grid (32x32 float opacity decay values)
-  const trailRef = useRef<number[][]>(
-    Array.from({ length: gridSize }, () => Array(gridSize).fill(0))
-  );
+  const trailRef = useRef<number[][]>([]);
 
-  // Calculate live population count
   let liveCount = 0;
   for (let r = 0; r < gridSize; r++) {
     for (let c = 0; c < gridSize; c++) {
@@ -29,7 +25,7 @@ export default function LifeCanvas() {
     }
   }
 
-  const rating = evalResult?.rating || 'Common';
+  const theme = evalResult?.theme || 'Terminal Green';
   const shouldShake = liveCount > 350 && !isInspecting;
 
   useEffect(() => {
@@ -42,7 +38,12 @@ export default function LifeCanvas() {
     const height = canvas.height;
     const cellSize = width / gridSize;
 
-    // Decay ghost trail values and set new cell trails
+    // Resize trail grid matrix if gridSize changed
+    if (trailRef.current.length !== gridSize) {
+      trailRef.current = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+    }
+
+    // Decay ghost trail values over 5 frames (decay 0.20 per frame)
     const trails = trailRef.current;
     for (let r = 0; r < gridSize; r++) {
       for (let c = 0; c < gridSize; c++) {
@@ -50,31 +51,31 @@ export default function LifeCanvas() {
           trails[r][c] = 0;
         } else {
           if (trails[r][c] > 0) {
-            trails[r][c] = Math.max(0, trails[r][c] - 0.25);
+            trails[r][c] = Math.max(0, trails[r][c] - 0.20);
           }
         }
       }
     }
 
-    // Grade Theme Color Palettes
-    let bgColor = '#020617'; // Slate 950
-    let gridColor = '#1E293B'; // Slate 800
-    let dividerColor = 'rgba(56, 189, 248, 0.3)';
+    // Theme Palettes
+    let bgColor = '#020617';
+    let gridColor = '#1E293B';
+    let dividerColor = 'rgba(34, 197, 94, 0.3)';
 
-    if (rating === 'Rare') {
-      bgColor = '#022C22';
-      gridColor = '#065F46';
-      dividerColor = 'rgba(52, 211, 153, 0.4)';
-    } else if (rating === 'Legendary' || rating === 'Mythic') {
+    if (theme === 'Cyberpunk Neon') {
       bgColor = '#16021F';
       gridColor = '#4C0519';
-      dividerColor = 'rgba(245, 158, 11, 0.4)';
+      dividerColor = 'rgba(6, 182, 212, 0.5)'; // Cyan divider
+    } else if (theme === 'Golden Solar') {
+      bgColor = '#0F051D';
+      gridColor = '#3B0764';
+      dividerColor = 'rgba(245, 158, 11, 0.5)'; // Cyber Gold divider
     }
 
     if (isInspecting) {
-      bgColor = '#0B0F17'; // Deep dark scan background
+      bgColor = '#0B0F17';
       gridColor = '#1E293B';
-      dividerColor = 'rgba(250, 204, 21, 0.6)'; // Yellow scan divider
+      dividerColor = 'rgba(250, 204, 21, 0.6)';
     }
 
     // Clear Canvas
@@ -83,7 +84,7 @@ export default function LifeCanvas() {
 
     // Draw Grid Lines
     ctx.strokeStyle = gridColor;
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = gridSize >= 48 ? 0.3 : 0.5;
 
     for (let i = 0; i <= gridSize; i++) {
       const pos = i * cellSize;
@@ -98,7 +99,7 @@ export default function LifeCanvas() {
       ctx.stroke();
     }
 
-    // Draw Symmetrical Axis Divider
+    // Draw Central Axis Divider
     const midX = (gridSize / 2) * cellSize;
     ctx.strokeStyle = dividerColor;
     ctx.lineWidth = 1.5;
@@ -115,8 +116,17 @@ export default function LifeCanvas() {
           if (trailAlpha > 0 && grid[r][c] === 0) {
             const x = c * cellSize;
             const y = r * cellSize;
-            ctx.fillStyle = `rgba(239, 68, 68, ${trailAlpha * 0.4})`;
-            ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+            
+            if (theme === 'Cyberpunk Neon') {
+              ctx.fillStyle = `rgba(236, 72, 153, ${trailAlpha * 0.45})`; // Neon Pink trail
+            } else if (theme === 'Golden Solar') {
+              ctx.fillStyle = `rgba(245, 158, 11, ${trailAlpha * 0.45})`; // Cyber Gold trail
+            } else {
+              ctx.fillStyle = `rgba(34, 197, 94, ${trailAlpha * 0.35})`; // Terminal Green trail
+            }
+            
+            const pad = cellSize > 12 ? 1.5 : 0.8;
+            ctx.fillRect(x + pad, y + pad, cellSize - pad * 2, cellSize - pad * 2);
           }
         }
       }
@@ -130,50 +140,53 @@ export default function LifeCanvas() {
           const x = c * cellSize;
           const y = r * cellSize;
 
-          let fillColor = '#38BDF8';
-          let glowColor = 'rgba(56, 189, 248, 0.4)';
+          let fillColor = '#22C55E'; // Terminal Green default
+          let glowColor = 'rgba(34, 197, 94, 0.4)';
 
           if (isInspecting) {
             fillColor = '#38BDF8';
             glowColor = 'rgba(56, 189, 248, 0.6)';
-          } else if (rating === 'Mythic' || rating === 'Legendary') {
+          } else if (theme === 'Golden Solar') {
             if (age === 1) {
-              fillColor = '#F59E0B';
-              glowColor = 'rgba(245, 158, 11, 0.6)';
+              fillColor = '#FACC15'; // Solar Yellow
+              glowColor = 'rgba(250, 204, 21, 0.6)';
             } else if (age >= 2 && age <= 5) {
-              fillColor = '#EC4899';
+              fillColor = '#F59E0B'; // Cyber Gold
+              glowColor = 'rgba(245, 158, 11, 0.6)';
+            } else {
+              fillColor = '#FB923C'; // Amber Flame
+              glowColor = 'rgba(251, 146, 60, 0.6)';
+            }
+          } else if (theme === 'Cyberpunk Neon') {
+            if (age === 1) {
+              fillColor = '#06B6D4'; // Cyan
+              glowColor = 'rgba(6, 182, 212, 0.6)';
+            } else if (age >= 2 && age <= 5) {
+              fillColor = '#EC4899'; // Neon Pink
               glowColor = 'rgba(236, 72, 153, 0.6)';
             } else {
-              fillColor = '#A855F7';
+              fillColor = '#A855F7'; // Neon Purple
               glowColor = 'rgba(168, 85, 247, 0.6)';
             }
-          } else if (rating === 'Rare') {
-            if (age === 1) {
-              fillColor = '#34D399';
-              glowColor = 'rgba(52, 211, 153, 0.5)';
-            } else {
-              fillColor = '#2DD4BF';
-              glowColor = 'rgba(45, 212, 191, 0.5)';
-            }
           } else {
-            if (age === 2) {
-              fillColor = '#34D399';
-              glowColor = 'rgba(52, 211, 153, 0.4)';
-            } else if (age >= 3 && age <= 6) {
-              fillColor = '#6366F1';
-              glowColor = 'rgba(99, 102, 241, 0.4)';
-            } else if (age >= 7) {
-              fillColor = '#EC4899';
-              glowColor = 'rgba(236, 72, 153, 0.5)';
+            // Terminal Green Theme
+            if (age === 1) {
+              fillColor = '#4ADE80'; // Emerald Light
+              glowColor = 'rgba(74, 222, 128, 0.4)';
+            } else if (age >= 2 && age <= 5) {
+              fillColor = '#22C55E'; // Green
+              glowColor = 'rgba(34, 197, 94, 0.4)';
+            } else {
+              fillColor = '#16A34A'; // Dark Green
+              glowColor = 'rgba(22, 163, 74, 0.4)';
             }
           }
 
-          // Outer Glow
           ctx.shadowColor = glowColor;
-          ctx.shadowBlur = 10;
+          ctx.shadowBlur = gridSize >= 48 ? 6 : 10;
 
           ctx.fillStyle = fillColor;
-          const padding = 1.5;
+          const padding = cellSize > 12 ? 1.5 : 0.8;
           ctx.fillRect(
             x + padding,
             y + padding,
@@ -195,34 +208,31 @@ export default function LifeCanvas() {
       const leftX = col * cellSize;
       const leftY = row * cellSize;
 
-      ctx.strokeStyle = '#FACC15'; // Glowing Yellow target
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#FACC15';
+      ctx.lineWidth = 2.0;
       ctx.shadowColor = '#FACC15';
-      ctx.shadowBlur = 12;
-      ctx.strokeRect(leftX + 1, leftY + 1, cellSize - 2, cellSize - 2);
+      ctx.shadowBlur = 10;
+      ctx.strokeRect(leftX + 0.5, leftY + 0.5, cellSize - 1, cellSize - 1);
 
-      // Pulse fill on target left cell
       ctx.fillStyle = isAlive ? 'rgba(250, 204, 21, 0.5)' : 'rgba(239, 68, 68, 0.25)';
-      ctx.fillRect(leftX + 2, leftY + 2, cellSize - 4, cellSize - 4);
+      ctx.fillRect(leftX + 1, leftY + 1, cellSize - 2, cellSize - 2);
 
       // Mirrored right cell box
       const rightX = mirroredCol * cellSize;
       const rightY = row * cellSize;
 
-      ctx.strokeStyle = '#EC4899'; // Glowing Pink mirrored pulse
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#EC4899';
+      ctx.lineWidth = 2.0;
       ctx.shadowColor = '#EC4899';
-      ctx.shadowBlur = 12;
-      ctx.strokeRect(rightX + 1, rightY + 1, cellSize - 2, cellSize - 2);
+      ctx.shadowBlur = 10;
+      ctx.strokeRect(rightX + 0.5, rightY + 0.5, cellSize - 1, cellSize - 1);
 
-      // Pulse fill on mirrored right cell
       ctx.fillStyle = isAlive ? 'rgba(236, 72, 153, 0.5)' : 'rgba(239, 68, 68, 0.25)';
-      ctx.fillRect(rightX + 2, rightY + 2, cellSize - 4, cellSize - 4);
+      ctx.fillRect(rightX + 1, rightY + 1, cellSize - 2, cellSize - 2);
 
-      // Reset shadow
       ctx.shadowBlur = 0;
     }
-  }, [grid, ageGrid, gridSize, rating, isInspecting, inspectCellInfo]);
+  }, [grid, ageGrid, gridSize, theme, isInspecting, inspectCellInfo]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPlaying || isInspecting) return;
@@ -260,11 +270,11 @@ export default function LifeCanvas() {
     <div className={`relative flex flex-col items-center justify-center w-full max-w-xl aspect-square rounded-2xl border p-3 shadow-2xl overflow-hidden group transition-all duration-500 ${
       isInspecting
         ? 'bg-slate-950 border-amber-500/60 shadow-[0_0_35px_rgba(250,204,21,0.25)]'
-        : rating === 'Mythic' || rating === 'Legendary'
+        : theme === 'Golden Solar'
+        ? 'bg-purple-950/70 border-amber-500/60 shadow-[0_0_35px_rgba(245,158,11,0.35)]'
+        : theme === 'Cyberpunk Neon'
         ? 'bg-purple-950/60 border-pink-500/50 shadow-[0_0_30px_rgba(236,72,153,0.3)]'
-        : rating === 'Rare'
-        ? 'bg-emerald-950/60 border-emerald-500/50 shadow-[0_0_30px_rgba(52,211,153,0.2)]'
-        : 'bg-slate-950 border-slate-800'
+        : 'bg-slate-950 border-emerald-500/40 shadow-[0_0_20px_rgba(34,197,94,0.2)]'
     } ${shouldShake ? 'animate-bounce' : ''}`}>
       
       {/* Background glow */}
@@ -275,7 +285,7 @@ export default function LifeCanvas() {
         <div className="absolute top-4 z-30 flex items-center gap-4 px-4 py-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-xl shadow-xl text-slate-200 animate-in fade-in duration-300">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
             <Search size={16} />
-            <span>Cell ({inspectCellInfo.row}, {inspectCellInfo.col})</span>
+            <span>Pod {inspectCellInfo.podIndex} | Cell ({inspectCellInfo.row}, {inspectCellInfo.col})</span>
           </div>
 
           <div className="h-4 w-px bg-slate-700" />
@@ -329,14 +339,16 @@ export default function LifeCanvas() {
             </span>
           ) : (
             <>
-              <span className="w-2 h-2 rounded-full bg-sky-400" /> Newborn
-              <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1" /> Young
+              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Newborn
+              <span className="w-2 h-2 rounded-full bg-cyan-400 ml-1" /> Young
               <span className="w-2 h-2 rounded-full bg-purple-500 ml-1" /> Mature
-              <span className="w-2 h-2 rounded-full bg-pink-500 ml-1" /> Elder
+              <span className="w-2 h-2 rounded-full bg-amber-400 ml-1" /> Elder
             </>
           )}
         </span>
-        <span className="text-slate-400 font-bold">{evalResult?.ruleMode || 'B3/S23'}</span>
+        <span className="text-slate-400 font-bold">
+          {gridSize}x{gridSize} ({evalResult?.podCount || 1} Pods) | {evalResult?.ruleMode || 'B3/S23'}
+        </span>
       </div>
     </div>
   );

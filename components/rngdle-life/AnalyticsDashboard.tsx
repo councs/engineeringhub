@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers } from 'lucide-react';
+import { Share2, Check, Sparkles, Activity, ShieldCheck, Flame, Repeat, Flag, Clock, Layers, Shield, Rocket, Zap, Wand2 } from 'lucide-react';
 
 export default function AnalyticsDashboard() {
   const {
@@ -18,7 +18,6 @@ export default function AnalyticsDashboard() {
 
   const [copied, setCopied] = useState(false);
 
-  // Compute active live cells in current generation
   let currentLiveCount = 0;
   for (let r = 0; r < gridSize; r++) {
     for (let c = 0; c < gridSize; c++) {
@@ -33,7 +32,6 @@ export default function AnalyticsDashboard() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Seed Rating Styling
   const rating = evalResult?.rating || 'Common';
   let ratingBadgeStyle = 'bg-slate-800 text-slate-300 border-slate-700';
   let ratingIcon = '⚙️';
@@ -55,7 +53,10 @@ export default function AnalyticsDashboard() {
     chaosPoints: 0,
     loopPoints: 0,
     traitPoints: 0,
+    multiplier: 1.0,
   };
+
+  const archetype = evalResult?.archetype;
 
   return (
     <div className="flex flex-col gap-6 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl w-full text-slate-200">
@@ -91,11 +92,23 @@ export default function AnalyticsDashboard() {
         </div>
       )}
 
-      {/* Top Header: Rating & Share Button */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+      {/* Top Header: Class Archetype Title & Share Button */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
         <div className="flex items-center gap-3">
-          <Sparkles className="text-sky-400" size={22} />
-          <h3 className="text-lg font-bold tracking-wide text-slate-100">Seed Analytics & Rating</h3>
+          {archetype ? (
+            <div className="flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-purple-950/80 to-slate-950 border border-purple-500/40 rounded-xl shadow-md">
+              <span className="text-2xl">{archetype.emoji}</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-extrabold tracking-widest text-purple-300">Class Archetype</span>
+                <span className="text-base font-extrabold text-slate-100">{archetype.title}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Sparkles className="text-sky-400" size={22} />
+              <h3 className="text-lg font-bold tracking-wide text-slate-100">Seed Analytics & Rating</h3>
+            </div>
+          )}
         </div>
 
         <button
@@ -183,84 +196,55 @@ export default function AnalyticsDashboard() {
           </span>
         </div>
 
-        {/* Chaos Variance */}
+        {/* Chaos Volatility */}
         <div className="flex flex-col p-4 bg-slate-950/50 rounded-xl border border-slate-800/80">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-            <Sparkles size={12} className="text-purple-400" /> Chaos SD
+            <Layers size={12} className="text-purple-400" /> Chaos SD
           </span>
           <span className="text-2xl font-mono font-bold text-purple-400 tabular-nums">
             ±{evalResult?.chaosVariance || 0}
           </span>
         </div>
-
       </div>
 
-      {/* Score Formula Breakdown Section */}
-      <div className="flex flex-col gap-3 border-t border-slate-800/80 pt-4">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-          <Layers size={14} className="text-sky-400" /> Seed Power Score Breakdown
-        </span>
-        
+      {/* Seed Power Score Breakdown Grid */}
+      <div className="flex flex-col gap-3 border-t border-slate-800/80 pt-5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Score Breakdown & Multipliers</span>
+          <span className="text-xs font-mono text-amber-400 font-bold">
+            {bd.multiplier}x Rarity Multiplier Applied
+          </span>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           
-          {/* 1. Run Time / Lifespan */}
           <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-              <Clock size={10} className="text-sky-400" /> Pre-Loop Run Time
-            </span>
-            <span className="font-mono font-bold text-sky-400 mt-1">
-              +{bd.lifespanPoints} pts
-            </span>
-            <span className="text-[9px] text-slate-500">{evalResult?.lifespan || 0} ticks (3.0×)</span>
+            <span className="text-slate-500 text-[10px] font-semibold">Lifespan</span>
+            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.lifespanPoints} pts</span>
           </div>
 
-          {/* 2. Peak Population */}
           <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-              <Flame size={10} className="text-rose-400" /> Peak Pop
-            </span>
-            <span className="font-mono font-bold text-rose-400 mt-1">
-              +{bd.peakPopPoints} pts
-            </span>
-            <span className="text-[9px] text-slate-500">{evalResult?.peakPopulation || 0} max cells (1.5×)</span>
+            <span className="text-slate-500 text-[10px] font-semibold">Peak Pop</span>
+            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.peakPopPoints} pts</span>
           </div>
 
-          {/* 3. Chaos SD */}
           <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-              <Sparkles size={10} className="text-purple-400" /> Chaos Variance
-            </span>
-            <span className="font-mono font-bold text-purple-400 mt-1">
-              +{bd.chaosPoints} pts
-            </span>
-            <span className="text-[9px] text-slate-500">±{evalResult?.chaosVariance || 0} SD (4.0×)</span>
+            <span className="text-slate-500 text-[10px] font-semibold">Chaos SD</span>
+            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.chaosPoints} pts</span>
           </div>
 
-          {/* 4. Loop Period */}
           <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-              <Repeat size={10} className="text-amber-400" /> Loop Bonus
-            </span>
-            <span className="font-mono font-bold text-amber-400 mt-1">
-              +{bd.loopPoints} pts
-            </span>
-            <span className="text-[9px] text-slate-500">Period {evalResult?.period || 0} (20× P)</span>
+            <span className="text-slate-500 text-[10px] font-semibold">Loop Bonus</span>
+            <span className="font-mono font-bold text-slate-200 mt-0.5">+{bd.loopPoints} pts</span>
           </div>
 
-          {/* 5. Traits */}
           <div className="flex flex-col p-3 bg-slate-950/40 rounded-lg border border-slate-800 text-xs col-span-2 sm:col-span-1">
-            <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
-              <Flag size={10} className="text-emerald-400" /> Trait Badges
-            </span>
-            <span className="font-mono font-bold text-emerald-400 mt-1">
-              +{bd.traitPoints} pts
-            </span>
-            <span className="text-[9px] text-slate-500">{evalResult?.traits.length || 0} badges (50×)</span>
+            <span className="text-slate-500 text-[10px] font-semibold">Traits Bonus</span>
+            <span className="font-mono font-bold text-amber-400 mt-0.5">+{bd.traitPoints} pts</span>
           </div>
 
         </div>
       </div>
-
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRngdleStore } from '@/lib/store/useRngdleStore';
-import { Dices, Play, Pause, SkipForward, SkipBack, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Search, X, ShieldAlert, Infinity as InfinityIcon } from 'lucide-react';
+import { Dices, Play, Pause, SkipForward, SkipBack, RotateCcw, SlidersHorizontal, Volume2, VolumeX, Zap, Search, X, ShieldAlert, Infinity as InfinityIcon, Grid } from 'lucide-react';
 
 export default function SeedControls() {
   const {
@@ -26,6 +26,7 @@ export default function SeedControls() {
     // Inspector State & Actions
     isInspecting,
     inspectStep,
+    inspectTotalSteps,
     inspectAutoPlay,
     startInspection,
     exitInspection,
@@ -58,11 +59,11 @@ export default function SeedControls() {
         {/* Seed Roller Input */}
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">7-Digit Seed (RNGdle)</span>
-              {evalResult?.ruleMode && (
+              {evalResult && (
                 <span className="text-[10px] font-extrabold text-amber-400 font-mono flex items-center gap-1">
-                  <Zap size={10} /> {evalResult.ruleMode}
+                  <Grid size={10} /> {evalResult.gridSize}x{evalResult.gridSize} ({evalResult.podCount} {evalResult.podCount === 1 ? 'Pod' : 'Pods'})
                 </span>
               )}
             </div>
@@ -113,8 +114,8 @@ export default function SeedControls() {
               </div>
             ))
           ) : (
-            <div className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950/60 text-slate-500 text-xs font-medium">
-              Standard Conway Rule (B3/S23)
+            <div className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-950/60 text-slate-500 text-xs font-medium flex items-center gap-1.5">
+              <span>⚙️</span> Standard Conway Rule (B3/S23)
             </div>
           )}
         </div>
@@ -152,7 +153,7 @@ export default function SeedControls() {
 
               <button
                 onClick={() => stepInspection(1)}
-                disabled={inspectStep >= 512}
+                disabled={inspectStep >= inspectTotalSteps}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs font-bold text-slate-200 border border-slate-700"
               >
                 Next Cell <SkipForward size={14} />
@@ -162,7 +163,7 @@ export default function SeedControls() {
             {/* Cell Progress Info & Exit */}
             <div className="flex items-center gap-4">
               <span className="text-xs font-mono font-bold text-amber-300">
-                Cell Index: <span className="text-white">{inspectStep}</span> / 512
+                Cell Index: <span className="text-white">{inspectStep}</span> / {inspectTotalSteps}
               </span>
 
               <button
@@ -181,13 +182,13 @@ export default function SeedControls() {
             {/* Cell Progress Slider */}
             <div className="flex flex-col flex-1 gap-1 w-full">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
-                <span>PRNG Cell Scanning Progress</span>
-                <span className="font-mono text-amber-400">{((inspectStep / 512) * 100).toFixed(0)}%</span>
+                <span>PRNG Pod Scanning Progress</span>
+                <span className="font-mono text-amber-400">{((inspectStep / inspectTotalSteps) * 100).toFixed(0)}%</span>
               </div>
               <input
                 type="range"
                 min="0"
-                max="512"
+                max={inspectTotalSteps}
                 value={inspectStep}
                 onChange={(e) => setInspectStep(Number(e.target.value))}
                 className="w-full h-2 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-400"
